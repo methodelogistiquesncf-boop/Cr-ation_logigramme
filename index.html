@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Éditeur de Logigrammes</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      overflow: hidden;
+      background: #f5f7fa;
+    }
+
+    /* Transitions fluides */
+    ::view-transition-group(*),
+    ::view-transition-old(*),
+    ::view-transition-new(*) {
+      animation-duration: 0.25s;
+      animation-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
+    }
+
+    .container {
+      display: flex;
+      height: 100vh;
+    }
+
+    /* Barre d'outils gauche */
+    .toolbar {
+      width: 220px;
+      background: white;
+      border-right: 1px solid #e1e4e8;
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    .toolbar h3 {
+      font-size: 14px;
+      color: #586069;
+      margin-bottom: 15px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .shape-item {
+      padding: 12px;
+      margin-bottom: 10px;
+      border: 2px solid #e1e4e8;
+      border-radius: 8px;
+      cursor: grab;
+      transition: all 0.2s;
+      background: white;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .shape-item:hover {
+      border-color: #0366d6;
+      transform: translateX(4px);
+      box-shadow: 0 2px 8px rgba(3, 102, 214, 0.1);
+    }
+
+    .shape-item:active {
+      cursor: grabbing;
+    }
+
+    .shape-icon {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .shape-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: #24292e;
+    }
+
+    /* Canvas central */
+    .canvas-wrapper {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .top-toolbar {
+      background: white;
+      border-bottom: 1px solid #e1e4e8;
+      padding: 12px 20px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: 1px solid #e1e4e8;
+      border-radius: 6px;
+      background: white;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn:hover {
+      background: #f6f8fa;
+      border-color: #0366d6;
+    }
+
+    .btn.active {
+      background: #0366d6;
+      color: white;
+      border-color: #0366d6;
+    }
+
+    .btn-export {
+      background: #28a745;
+      color: white;
+      border-color: #28a745;
+      margin-left: auto;
+    }
+
+    .btn-export:hover {
+      background: #22863a;
+    }
+
+    .btn-clear {
+      background: #d73a49;
+      color: white;
+      border-color: #d73a49;
+    }
+
+    .btn-clear:hover {
+      background: #cb2431;
+    }
+
+    #canvas {
+      flex: 1;
+      position: relative;
+      background: 
+        linear-gradient(90deg, #e1e4e8 1px, transparent 1px),
+        linear-gradient(#e1e4e8 1px, transparent 1px);
+      background-size: 20px 20px;
+      overflow: auto;
+      cursor: default;
+    }
+
+    #canvas.arrow-mode {
+      cursor: crosshair;
+    }
+
+    /* Blocs sur le canvas */
+    .node {
+      position: absolute;
+      min-width: 120px;
+      padding: 15px;
+      border: 2px solid #0366d6;
+      border-radius: 8px;
+      background: white;
+      cursor: move;
+      user-select: none;
+      transition: box-shadow 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .node:hover {
+      box-shadow: 0 4px 12px rgba(3, 102, 214, 0.2);
+      z-index: 10;
+    }
+
+    .node.selected {
+      box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.3);
+      z-index: 11;
+    }
+
+    .node.terminal {
+      border-radius: 50px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-color: #667eea;
+    }
+
+    .node.process {
+      border-radius: 8px;
+    }
+
+    .node.decision {
+      transform: rotate(45deg);
+      border-radius: 8px;
+    }
+
+    .node.decision .node-text {
+      transform: rotate(-45deg);
+    }
+
+    .node.io {
+      clip-path: polygon(10% 0%, 100% 0%, 90% 100%, 0% 100%);
+      border-radius: 0;
+    }
+
+    .node.document {
+      border-radius: 8px 8px 0 0;
+      position: relative;
+    }
+
+    .node.document::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: -2px;
+      right: -2px;
+      height: 10px;
+      border: 2px solid;
+      border-color: inherit;
+      border-top: none;
+      border-radius: 0 0 50% 50%;
+      background: inherit;
+    }
+
+    /* Connexions */
+    svg.connections {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .connection-line {
+      stroke: #586069;
+      stroke-width: 2;
+      fill: none;
+      marker-end: url(#arrowhead);
+    }
+
+    .connection-label {
+      font-size: 12px;
+      fill: #586069;
+      background: white;
+      padding: 2px 6px;
+    }
+
+    /* Panneau propriétés */
+    .properties {
+      width: 280px;
+      background: white;
+      border-left: 1px solid #e1e4e8;
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    .properties h3 {
+      font-size: 16px;
+      margin-bottom: 20px;
+      color: #24292e;
+    }
+
+    .prop-group {
+      margin-bottom: 20px;
+    }
+
+    .prop-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 8px;
+      color: #586069;
+    }
+
+    .prop-group input[type="text"],
+    .prop-group textarea {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #e1e4e8;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+
+    .prop-group textarea {
+      resize: vertical;
+      min-height: 60px;
+    }
+
+    .prop-group input[type="color"] {
+      width: 100%;
+      height: 40px;
+      border: 1px solid #e1e4e8;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .color-presets {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .color-preset {
+      width: 100%;
+      height: 32px;
+      border: 2px solid #e1e4e8;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .color-preset:hover {
+      transform: scale(1.1);
+      border-color: #0366d6;
+    }
+
+    .empty-state {
+      text-align: center;
+      color: #959da5;
+      font-size: 13px;
+      margin-top: 40px;
+    }
+
+    /* Indicateur de connexion */
+    .connecting-line {
+      stroke: #0366d6;
+      stroke-width: 2;
+      stroke-dasharray: 5, 5;
+      fill: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Barre d'outils gauche -->
+    <div class="toolbar">
+      <h3>📦 Formes</h3>
+      
+      <div class="shape-item" draggable="true" data-type="terminal">
+        <div class="shape-icon">
+          <svg width="40" height="24" viewBox="0 0 40 24">
+            <rect width="40" height="24" rx="12" fill="#667eea" stroke="#5568d3" stroke-width="2"/>
+          </svg>
+        </div>
+        <div class="shape-label">Début/Fin</div>
+      </div>
+
+      <div class="shape-item" draggable="true" data-type="process">
+        <div class="shape-icon">
+          <svg width="40" height="24" viewBox="0 0 40 24">
+            <rect width="40" height="24" rx="4" fill="white" stroke="#0366d6" stroke-width="2"/>
+          </svg>
+        </div>
+        <div class="shape-label">Processus</div>
+      </div>
+
+      <div class="shape-item" draggable="true" data-type="decision">
+        <div class="shape-icon">
+          <svg width="30" height="30" viewBox="0 0 30 30">
+            <rect x="15" y="0" width="21" height="21" transform="rotate(45 15 15)" fill="white" stroke="#f59e0b" stroke-width="2"/>
+          </svg>
+        </div>
+        <div class="shape-label">Décision</div>
+      </div>
+
+      <div class="shape-item" draggable="true" data-type="io">
+        <div class="shape-icon">
+          <svg width="40" height="24" viewBox="0 0 40 24">
+            <path d="M4 0 L40 0 L36 24 L0 24 Z" fill="white" stroke="#10b981" stroke-width="2"/>
+          </svg>
+        </div>
+        <div class="shape-label">Entrée/Sortie</div>
+      </div>
+
+      <div class="shape-item" draggable="true" data-type="document">
+        <div class="shape-icon">
+          <svg width="40" height="28" viewBox="0 0 40 28">
+            <rect width="40" height="20" fill="white" stroke="#8b5cf6" stroke-width="2"/>
+            <path d="M0 20 Q10 25 20 20 T40 20 L40 24 Q30 19 20 24 T0 24 Z" fill="white" stroke="#8b5cf6" stroke-width="2"/>
+          </svg>
+        </div>
+        <div class="shape-label">Document</div>
+      </div>
+    </div>
+
+    <!-- Zone centrale -->
+    <div class="canvas-wrapper">
+      <div class="top-toolbar">
+        <button class="btn" id="arrowBtn">
+          <span>➜</span>
+          Flèche
+        </button>
+        <button class="btn" id="undoBtn">
+          <span>↶</span>
+          Annuler
+        </button>
+        <button class="btn btn-clear" id="clearBtn">
+          <span>🗑</span>
+          Vider
+        </button>
+        <button class="btn btn-export" id="exportBtn">
+          <span>💾</span>
+          Exporter SVG
+        </button>
+      </div>
+
+      <div id="canvas">
+        <svg class="connections" id="connectionsSvg">
+          <defs>
+            <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+              <polygon points="0 0, 10 3, 0 6" fill="#586069"/>
+            </marker>
+          </defs>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Panneau propriétés -->
+    <div class="properties" id="properties">
+      <div class="empty-state">
+        👈 Sélectionnez un élément<br>pour modifier ses propriétés
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // État de l'application
+    const state = {
+      nodes: [],
+      connections: [],
+      selectedNode: null,
+      selectedConnection: null,
+      draggedNode: null,
+      arrowMode: false,
+      arrowStart: null,
+      history: [],
+      nodeCounter: 0,
+      connectionCounter: 0
+    };
+
+    // Références DOM
+    const canvas = document.getElementById('canvas');
+    const connectionsSvg = document.getElementById('connectionsSvg');
+    const properties = document.getElementById('properties');
+    const arrowBtn = document.getElementById('arrowBtn');
+    const undoBtn = document.getElementById('undoBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const exportBtn = document.getElementById('exportBtn');
+
+    // Couleurs prédéfinies
+    const colorPresets = [
+      '#0366d6', '#28a745', '#d73a49', '#f59e0b', '#8b5cf6',
+      '#06b6d4', '#ec4899', '#6366f1', '#10b981', '#f97316'
+    ];
+
+    // Configuration des types de nœuds
+    const nodeTypes = {
+      terminal: { label: 'Début/Fin', color: '#667eea' },
+      process: { label: 'Processus', color: '#0366d6' },
+      decision: { label: 'Décision', color: '#f59e0b' },
+      io: { label: 'Entrée/Sortie', color: '#10b981' },
+      document: { label: 'Document', color: '#8b5cf6' }
+    };
+
+    // Sauvegarder l'état dans l'historique
+    function saveHistory() {
+      state.history.push(JSON.stringify({
+        nodes: state.nodes,
+        connections: state.connections
+      }));
+      if (state.history.length > 50) state.history.shift();
+    }
+
+    // Annuler
+    undoBtn.addEventListener('click', () => {
+      if (state.history.length > 0) {
+        const prev = JSON.parse(state.history.pop());
+        state.nodes = prev.nodes;
+        state.connections = prev.connections;
+        state.selectedNode = null;
+        state.selectedConnection = null;
+        render();
+      }
+    });
+
+    // Vider le canvas
+    clearBtn.addEventListener('click', () => {
+      if (confirm('Voulez-vous vraiment vider le logigramme ?')) {
+        saveHistory();
+        state.nodes = [];
+        state.connections = [];
+        state.selectedNode = null;
+        state.selectedConnection = null;
+        render();
+      }
+    });
+
+    // Glisser-déposer depuis la barre d'outils
+    document.querySelectorAll('.shape-item').forEach(item => {
+      item.addEventListener('dragstart', (e) => {
+        e.dataTransfer.setData('nodeType', item.dataset.type);
+      });
+    });
+
+    canvas.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+
+    canvas.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const nodeType = e.dataTransfer.getData('nodeType');
+      if (nodeType) {
+        saveHistory();
+        const rect = canvas.getBoundingClientRect();
+        const node = {
+          id: ++state.nodeCounter,
+          type: nodeType,
+          x: e.clientX - rect.left + canvas.scrollLeft - 60,
+          y: e.clientY - rect.top + canvas.scrollTop - 20,
+          text: nodeTypes[nodeType].label,
+          color: nodeTypes[nodeType].color
+        };
+        state.nodes.push(node);
+        render();
+      }
+    });
+
+    // Mode flèche
+    arrowBtn.addEventListener('click', () => {
+      state.arrowMode = !state.arrowMode;
+      arrowBtn.classList.toggle('active', state.arrowMode);
+      canvas.classList.toggle('arrow-mode', state.arrowMode);
+      if (!state.arrowMode) {
+        state.arrowStart = null;
+      }
+    });
+
+    // Créer un nœud DOM
+    function createNodeElement(node) {
+      const div = document.createElement('div');
+      div.className = `node ${node.type}`;
+      div.style.left = node.x + 'px';
+      div.style.top = node.y + 'px';
+      div.style.borderColor = node.color;
+      div.style.backgroundColor = node.type === 'terminal' ? node.color : 'white';
+      div.style.color = node.type === 'terminal' ? 'white' : '#24292e';
+      div.dataset.id = node.id;
+
+      const textSpan = document.createElement('span');
+      textSpan.className = 'node-text';
+      textSpan.textContent = node.text;
+      div.appendChild(textSpan);
+
+      // Sélection
+      div.addEventListener('click', (e) => {
+        e.stopPropagation();
+        
+        if (state.arrowMode) {
+          if (!state.arrowStart) {
+            state.arrowStart = node;
+            div.style.boxShadow = '0 0 0 3px rgba(3, 102, 214, 0.5)';
+          } else if (state.arrowStart.id !== node.id) {
+            saveHistory();
+            state.connections.push({
+              id: ++state.connectionCounter,
+              from: state.arrowStart.id,
+              to: node.id,
+              label: ''
+            });
+            state.arrowStart = null;
+            state.arrowMode = false;
+            arrowBtn.classList.remove('active');
+            canvas.classList.remove('arrow-mode');
+            render();
+          }
+        } else {
+          selectNode(node);
+        }
+      });
+
+      // Déplacement
+      let isDragging = false;
+      let startX, startY;
+
+      div.addEventListener('mousedown', (e) => {
+        if (state.arrowMode) return;
+        isDragging = true;
+        startX = e.clientX - node.x;
+        startY = e.clientY - node.y;
+        div.style.cursor = 'grabbing';
+        e.preventDefault();
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        node.x = e.clientX - startX;
+        node.y = e.clientY - startY;
+        div.style.left = node.x + 'px';
+        div.style.top = node.y + 'px';
+        renderConnections();
+      });
+
+      document.addEventListener('mouseup', () => {
+        if (isDragging) {
+          isDragging = false;
+          div.style.cursor = 'move';
+          saveHistory();
+        }
+      });
+
+      if (state.selectedNode && state.selectedNode.id === node.id) {
+        div.classList.add('selected');
+      }
+
+      return div;
+    }
+
+    // Sélectionner un nœud
+    function selectNode(node) {
+      state.selectedNode = node;
+      state.selectedConnection = null;
+      renderProperties();
+      render();
+    }
+
+    // Obtenir le centre d'un nœud
+    function getNodeCenter(node) {
+      const el = document.querySelector(`[data-id="${node.id}"]`);
+      if (!el) return { x: node.x, y: node.y };
+      const rect = el.getBoundingClientRect();
+      const canvasRect = canvas.getBoundingClientRect();
+      return {
+        x: rect.left - canvasRect.left + rect.width / 2 + canvas.scrollLeft,
+        y: rect.top - canvasRect.top + rect.height / 2 + canvas.scrollTop
+      };
+    }
+
+    // Dessiner les connexions
+    function renderConnections() {
+      connectionsSvg.querySelectorAll('.connection-line, .connection-label').forEach(el => el.remove());
+
+      state.connections.forEach(conn => {
+        const fromNode = state.nodes.find(n => n.id === conn.from);
+        const toNode = state.nodes.find(n => n.id === conn.to);
+        if (!fromNode || !toNode) return;
+
+        const from = getNodeCenter(fromNode);
+        const to = getNodeCenter(toNode);
+
+        // Ligne courbe
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        const midX = (from.x + to.x) / 2;
+        const midY = (from.y + to.y) / 2;
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        const offset = 30;
+        const ctrlX = midX + (dy > 0 ? offset : -offset);
+        const ctrlY = midY - (dx > 0 ? offset : -offset);
+
+        path.setAttribute('d', `M ${from.x} ${from.y} Q ${ctrlX} ${ctrlY} ${to.x} ${to.y}`);
+        path.classList.add('connection-line');
+        path.style.cursor = 'pointer';
+        
+        path.addEventListener('click', (e) => {
+          e.stopPropagation();
+          selectConnection(conn);
+        });
+
+        connectionsSvg.appendChild(path);
+
+        // Label
+        if (conn.label) {
+          const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          text.setAttribute('x', ctrlX);
+          text.setAttribute('y', ctrlY - 5);
+          text.setAttribute('text-anchor', 'middle');
+          text.classList.add('connection-label');
+          text.textContent = conn.label;
+          connectionsSvg.appendChild(text);
+        }
+      });
+    }
+
+    // Sélectionner une connexion
+    function selectConnection(conn) {
+      state.selectedConnection = conn;
+      state.selectedNode = null;
+      renderProperties();
+      render();
+    }
+
+    // Afficher le panneau de propriétés
+    function renderProperties() {
+      if (state.selectedNode) {
+        const node = state.selectedNode;
+        properties.innerHTML = `
+          <h3>✏️ Propriétés du bloc</h3>
+          
+          <div class="prop-group">
+            <label>Texte</label>
+            <textarea id="nodeText">${node.text}</textarea>
+          </div>
+
+          <div class="prop-group">
+            <label>Couleur</label>
+            <input type="color" id="nodeColor" value="${node.color}">
+            <div class="color-presets">
+              ${colorPresets.map(c => `<div class="color-preset" style="background:${c}" data-color="${c}"></div>`).join('')}
+            </div>
+          </div>
+
+          <div class="prop-group">
+            <button class="btn btn-clear" style="width:100%" id="deleteNode">🗑 Supprimer le bloc</button>
+          </div>
+        `;
+
+        document.getElementById('nodeText').addEventListener('input', (e) => {
+          node.text = e.target.value;
+          render();
+        });
+
+        document.getElementById('nodeColor').addEventListener('input', (e) => {
+          node.color = e.target.value;
+          render();
+        });
+
+        document.querySelectorAll('.color-preset').forEach(preset => {
+          preset.addEventListener('click', () => {
+            node.color = preset.dataset.color;
+            document.getElementById('nodeColor').value = node.color;
+            render();
+          });
+        });
+
+        document.getElementById('deleteNode').addEventListener('click', () => {
+          saveHistory();
+          state.nodes = state.nodes.filter(n => n.id !== node.id);
+          state.connections = state.connections.filter(c => c.from !== node.id && c.to !== node.id);
+          state.selectedNode = null;
+          render();
+        });
+
+      } else if (state.selectedConnection) {
+        const conn = state.selectedConnection;
+        properties.innerHTML = `
+          <h3>➜ Propriétés de la flèche</h3>
+          
+          <div class="prop-group">
+            <label>Libellé (ex: Oui, Non...)</label>
+            <input type="text" id="connLabel" value="${conn.label}" placeholder="Libellé optionnel">
+          </div>
+
+          <div class="prop-group">
+            <button class="btn btn-clear" style="width:100%" id="deleteConn">🗑 Supprimer la connexion</button>
+          </div>
+        `;
+
+        document.getElementById('connLabel').addEventListener('input', (e) => {
+          conn.label = e.target.value;
+          renderConnections();
+        });
+
+        document.getElementById('deleteConn').addEventListener('click', () => {
+          saveHistory();
+          state.connections = state.connections.filter(c => c.id !== conn.id);
+          state.selectedConnection = null;
+          render();
+        });
+
+      } else {
+        properties.innerHTML = `
+          <div class="empty-state">
+            👈 Sélectionnez un élément<br>pour modifier ses propriétés
+          </div>
+        `;
+      }
+    }
+
+    // Rendu complet
+    function render() {
+      // Nettoyer les nœuds
+      canvas.querySelectorAll('.node').forEach(el => el.remove());
+
+      // Recréer les nœuds
+      state.nodes.forEach(node => {
+        canvas.appendChild(createNodeElement(node));
+      });
+
+      // Redessiner les connexions
+      renderConnections();
+
+      // Rafraîchir les propriétés
+      if (state.selectedNode || state.selectedConnection) {
+        renderProperties();
+      }
+    }
+
+    // Déselection au clic sur le canvas
+    canvas.addEventListener('click', (e) => {
+      if (e.target === canvas) {
+        state.selectedNode = null;
+        state.selectedConnection = null;
+        renderProperties();
+        render();
+      }
+    });
+
+    // Export SVG
+    exportBtn.addEventListener('click', () => {
+      // Calculer les dimensions
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      
+      state.nodes.forEach(node => {
+        const el = document.querySelector(`[data-id="${node.id}"]`);
+        if (el) {
+          const rect = el.getBoundingClientRect();
+          minX = Math.min(minX, node.x);
+          minY = Math.min(minY, node.y);
+          maxX = Math.max(maxX, node.x + rect.width);
+          maxY = Math.max(maxY, node.y + rect.height);
+        }
+      });
+
+      const padding = 40;
+      const width = maxX - minX + padding * 2;
+      const height = maxY - minY + padding * 2;
+      const offsetX = -minX + padding;
+      const offsetY = -minY + padding;
+
+      let svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#586069"/>
+    </marker>
+  </defs>
+  
+  <!-- Connexions -->
+`;
+
+      // Ajouter les connexions
+      state.connections.forEach(conn => {
+        const fromNode = state.nodes.find(n => n.id === conn.from);
+        const toNode = state.nodes.find(n => n.id === conn.to);
+        if (!fromNode || !toNode) return;
+
+        const from = getNodeCenter(fromNode);
+        const to = getNodeCenter(toNode);
+        const midX = (from.x + to.x) / 2 + offsetX;
+        const midY = (from.y + to.y) / 2 + offsetY;
+
+        svg += `  <path d="M ${from.x + offsetX} ${from.y + offsetY} L ${to.x + offsetX} ${to.y + offsetY}" stroke="#586069" stroke-width="2" fill="none" marker-end="url(#arrow)"/>\n`;
+        
+        if (conn.label) {
+          svg += `  <text x="${midX}" y="${midY - 5}" text-anchor="middle" font-size="12" fill="#586069">${conn.label}</text>\n`;
+        }
+      });
+
+      svg += `\n  <!-- Nœuds -->\n`;
+
+      // Ajouter les nœuds
+      state.nodes.forEach(node => {
+        const el = document.querySelector(`[data-id="${node.id}"]`);
+        if (!el) return;
+        
+        const rect = el.getBoundingClientRect();
+        const w = rect.width;
+        const h = rect.height;
+        const x = node.x + offsetX;
+        const y = node.y + offsetY;
+        const fill = node.type === 'terminal' ? node.color : 'white';
+        const textColor = node.type === 'terminal' ? 'white' : '#24292e';
+
+        switch (node.type) {
+          case 'terminal':
+            svg += `  <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h/2}" fill="${fill}" stroke="${node.color}" stroke-width="2"/>\n`;
+            break;
+          case 'process':
+            svg += `  <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="${fill}" stroke="${node.color}" stroke-width="2"/>\n`;
+            break;
+          case 'decision':
+            svg += `  <rect x="${x + w/2}" y="${y}" width="${Math.max(w,h)}" height="${Math.max(w,h)}" rx="8" fill="${fill}" stroke="${node.color}" stroke-width="2" transform="rotate(45 ${x + w/2} ${y + h/2})"/>\n`;
+            break;
+          case 'io':
+            svg += `  <path d="M ${x + w*0.1} ${y} L ${x + w} ${y} L ${x + w*0.9} ${y + h} L ${x} ${y + h} Z" fill="${fill}" stroke="${node.color}" stroke-width="2"/>\n`;
+            break;
+          case 'document':
+            svg += `  <rect x="${x}" y="${y}" width="${w}" height="${h-10}" fill="${fill}" stroke="${node.color}" stroke-width="2"/>\n`;
+            svg += `  <path d="M ${x} ${y+h-10} Q ${x+w/4} ${y+h-5} ${x+w/2} ${y+h-10} T ${x+w} ${y+h-10} L ${x+w} ${y+h-6} Q ${x+3*w/4} ${y+h-11} ${x+w/2} ${y+h-6} T ${x} ${y+h-6} Z" fill="${fill}" stroke="${node.color}" stroke-width="2"/>\n`;
+            break;
+        }
+
+        svg += `  <text x="${x + w/2}" y="${y + h/2 + 5}" text-anchor="middle" font-size="13" font-weight="500" fill="${textColor}">${node.text}</text>\n`;
+      });
+
+      svg += `</svg>`;
+
+      // Télécharger
+      const blob = new Blob([svg], { type: 'image/svg+xml' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'logigramme.svg';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    // Initialisation
+    render();
+  </script>
+</body>
+</html>
