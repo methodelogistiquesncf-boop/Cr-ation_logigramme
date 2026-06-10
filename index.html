@@ -162,6 +162,7 @@
       background: #f6f8fa;
       border-radius: 6px;
       border: 1px solid #e1e4e8;
+      flex-wrap: wrap;
     }
 
     .arrow-type-btn {
@@ -170,8 +171,9 @@
       border-radius: 4px;
       background: transparent;
       cursor: pointer;
-      font-size: 12px;
+      font-size: 11px;
       transition: all 0.2s;
+      white-space: nowrap;
     }
 
     .arrow-type-btn:hover {
@@ -588,6 +590,30 @@
           <div style="font-size: 10px; margin-top: 4px;">Trait</div>
         </div>
 
+        <div class="arrow-preview-item" data-arrow="elbow">
+          <svg width="50" height="30" viewBox="0 0 50 30">
+            <defs>
+              <marker id="preview-elbow" markerWidth="8" markerHeight="8" refX="7" refY="2.5" orient="auto">
+                <polygon points="0 0, 8 2.5, 0 5" fill="#586069"/>
+              </marker>
+            </defs>
+            <path d="M5 5 L25 5 L25 25 L45 25" stroke="#586069" stroke-width="2" fill="none" marker-end="url(#preview-elbow)"/>
+          </svg>
+          <div style="font-size: 10px; margin-top: 4px;">Angle droit</div>
+        </div>
+
+        <div class="arrow-preview-item" data-arrow="elbow-dashed">
+          <svg width="50" height="30" viewBox="0 0 50 30">
+            <defs>
+              <marker id="preview-elbow-dash" markerWidth="8" markerHeight="8" refX="7" refY="2.5" orient="auto">
+                <polygon points="0 0, 8 2.5, 0 5" fill="#586069"/>
+              </marker>
+            </defs>
+            <path d="M5 5 L25 5 L25 25 L45 25" stroke="#586069" stroke-width="2" stroke-dasharray="4,3" fill="none" marker-end="url(#preview-elbow-dash)"/>
+          </svg>
+          <div style="font-size: 10px; margin-top: 4px;">Angle pointillé</div>
+        </div>
+
         <div class="arrow-preview-item" data-arrow="double">
           <svg width="50" height="20" viewBox="0 0 50 20">
             <defs>
@@ -636,6 +662,8 @@
         <div class="arrow-type-selector" id="arrowTypeSelector" style="display: none;">
           <button class="arrow-type-btn active" data-type="simple">Flèche</button>
           <button class="arrow-type-btn" data-type="line">Trait</button>
+          <button class="arrow-type-btn" data-type="elbow">Angle droit</button>
+          <button class="arrow-type-btn" data-type="elbow-dashed">Angle pointillé</button>
           <button class="arrow-type-btn" data-type="double">Double</button>
           <button class="arrow-type-btn" data-type="dashed">Pointillé</button>
           <button class="arrow-type-btn" data-type="thick">Épaisse</button>
@@ -731,8 +759,6 @@
     function generateShapeSVG(type, width, height, borderColor, fillColor) {
       const fill = fillColor === 'transparent' ? 'white' : fillColor;
       const fillOpacity = fillColor === 'transparent' ? '1' : '1';
-      
-      let path = '';
       
       switch(type) {
         case 'terminal':
@@ -883,6 +909,25 @@
       return positions[anchor] || positions.center;
     }
 
+    // Générer un chemin orthogonal (angle droit)
+    function generateElbowPath(from, to) {
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
+      
+      // Point intermédiaire (milieu horizontal ou vertical selon la distance)
+      const midX = from.x + dx / 2;
+      const midY = from.y + dy / 2;
+      
+      // Déterminer si on fait horizontal-vertical ou vertical-horizontal
+      if (Math.abs(dx) > Math.abs(dy)) {
+        // Horizontal d'abord
+        return `M ${from.x} ${from.y} L ${midX} ${from.y} L ${midX} ${to.y} L ${to.x} ${to.y}`;
+      } else {
+        // Vertical d'abord
+        return `M ${from.x} ${from.y} L ${from.x} ${midY} L ${to.x} ${midY} L ${to.x} ${to.y}`;
+      }
+    }
+
     function createNodeElement(node) {
       const div = document.createElement('div');
       div.className = 'node';
@@ -1030,49 +1075,71 @@
 
         const isSelected = state.selectedConnection && state.selectedConnection.id === conn.id;
 
-        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('x1', from.x);
-        line.setAttribute('y1', from.y);
-        line.setAttribute('x2', to.x);
-        line.setAttribute('y2', to.y);
-        line.classList.add('connection-line');
+        let pathElement;
+        
+        // Créer la ligne ou le chemin selon le type
+        if (conn.arrowType === 'elbow' || conn.arrowType === 'elbow-dashed') {
+          // Chemin orthogonal
+          pathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+          pathElement.setAttribute('d', generateElbowPath(from, to));
+        } else {
+          // Ligne droite
+          pathElement = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          pathElement.setAttribute('x1', from.x);
+          pathElement.setAttribute('y1', from.y);
+          pathElement.setAttribute('x2', to.x);
+          pathElement.setAttribute('y2', to.y);
+        }
+        
+        pathElement.classList.add('connection-line');
         
         if (isSelected) {
-          line.classList.add('selected');
+          pathElement.classList.add('selected');
         }
 
+        // Appliquer le style selon le type de connexion
         switch (conn.arrowType) {
           case 'simple':
-            line.setAttribute('stroke-width', '2');
-            line.setAttribute('marker-end', isSelected ? 'url(#arrowSimple-selected)' : 'url(#arrowSimple)');
+            pathElement.setAttribute('stroke-width', '2');
+            pathElement.setAttribute('marker-end', isSelected ? 'url(#arrowSimple-selected)' : 'url(#arrowSimple)');
             break;
           case 'line':
-            line.setAttribute('stroke-width', '2');
+            pathElement.setAttribute('stroke-width', '2');
+            break;
+          case 'elbow':
+            pathElement.setAttribute('stroke-width', '2');
+            pathElement.setAttribute('marker-end', isSelected ? 'url(#arrowSimple-selected)' : 'url(#arrowSimple)');
+            break;
+          case 'elbow-dashed':
+            pathElement.setAttribute('stroke-width', '2');
+            pathElement.setAttribute('stroke-dasharray', '5,4');
+            pathElement.setAttribute('marker-end', isSelected ? 'url(#arrowSimple-selected)' : 'url(#arrowSimple)');
             break;
           case 'double':
-            line.setAttribute('stroke-width', '2');
-            line.setAttribute('marker-end', isSelected ? 'url(#arrowSimple-selected)' : 'url(#arrowSimple)');
-            line.setAttribute('marker-start', isSelected ? 'url(#arrowSimple-selected)' : 'url(#arrowSimple)');
+            pathElement.setAttribute('stroke-width', '2');
+            pathElement.setAttribute('marker-end', isSelected ? 'url(#arrowSimple-selected)' : 'url(#arrowSimple)');
+            pathElement.setAttribute('marker-start', isSelected ? 'url(#arrowSimple-selected)' : 'url(#arrowSimple)');
             break;
           case 'dashed':
-            line.setAttribute('stroke-width', '2');
-            line.setAttribute('stroke-dasharray', '5,4');
-            line.setAttribute('marker-end', isSelected ? 'url(#arrowSimple-selected)' : 'url(#arrowSimple)');
+            pathElement.setAttribute('stroke-width', '2');
+            pathElement.setAttribute('stroke-dasharray', '5,4');
+            pathElement.setAttribute('marker-end', isSelected ? 'url(#arrowSimple-selected)' : 'url(#arrowSimple)');
             break;
           case 'thick':
-            line.setAttribute('stroke-width', '4');
-            line.setAttribute('marker-end', isSelected ? 'url(#arrowThick-selected)' : 'url(#arrowThick)');
+            pathElement.setAttribute('stroke-width', '4');
+            pathElement.setAttribute('marker-end', isSelected ? 'url(#arrowThick-selected)' : 'url(#arrowThick)');
             break;
         }
 
-        line.style.pointerEvents = 'stroke';
-        line.addEventListener('click', (e) => {
+        pathElement.style.pointerEvents = 'stroke';
+        pathElement.addEventListener('click', (e) => {
           e.stopPropagation();
           selectConnection(conn);
         });
 
-        connectionsSvg.appendChild(line);
+        connectionsSvg.appendChild(pathElement);
 
+        // Label au milieu
         if (conn.label) {
           const midX = (from.x + to.x) / 2;
           const midY = (from.y + to.y) / 2;
@@ -1215,6 +1282,8 @@
             <select id="connArrowType">
               <option value="simple" ${conn.arrowType === 'simple' ? 'selected' : ''}>Flèche simple</option>
               <option value="line" ${conn.arrowType === 'line' ? 'selected' : ''}>Trait simple</option>
+              <option value="elbow" ${conn.arrowType === 'elbow' ? 'selected' : ''}>Angle droit</option>
+              <option value="elbow-dashed" ${conn.arrowType === 'elbow-dashed' ? 'selected' : ''}>Angle droit pointillé</option>
               <option value="double" ${conn.arrowType === 'double' ? 'selected' : ''}>Double flèche</option>
               <option value="dashed" ${conn.arrowType === 'dashed' ? 'selected' : ''}>Pointillé</option>
               <option value="thick" ${conn.arrowType === 'thick' ? 'selected' : ''}>Épaisse</option>
@@ -1308,17 +1377,30 @@
         const from = getAnchorPosition(fromNode, conn.fromAnchor);
         const to = getAnchorPosition(toNode, conn.toAnchor);
 
-        let attrs = `x1="${from.x + offsetX}" y1="${from.y + offsetY}" x2="${to.x + offsetX}" y2="${to.y + offsetY}" stroke="#586069" fill="none"`;
+        let attrs = `stroke="#586069" fill="none"`;
+        let element = 'line';
+        let coords = `x1="${from.x + offsetX}" y1="${from.y + offsetY}" x2="${to.x + offsetX}" y2="${to.y + offsetY}"`;
+        
+        if (conn.arrowType === 'elbow' || conn.arrowType === 'elbow-dashed') {
+          element = 'path';
+          const path = generateElbowPath(
+            { x: from.x + offsetX, y: from.y + offsetY },
+            { x: to.x + offsetX, y: to.y + offsetY }
+          );
+          coords = `d="${path}"`;
+        }
         
         switch (conn.arrowType) {
           case 'simple': attrs += ` stroke-width="2" marker-end="url(#arrow)"`; break;
           case 'line': attrs += ` stroke-width="2"`; break;
+          case 'elbow': attrs += ` stroke-width="2" marker-end="url(#arrow)"`; break;
+          case 'elbow-dashed': attrs += ` stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow)"`; break;
           case 'double': attrs += ` stroke-width="2" marker-end="url(#arrow)" marker-start="url(#arrow)"`; break;
           case 'dashed': attrs += ` stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow)"`; break;
           case 'thick': attrs += ` stroke-width="4" marker-end="url(#arrowThickExport)"`; break;
         }
 
-        svg += `  <line ${attrs}/>\n`;
+        svg += `  <${element} ${coords} ${attrs}/>\n`;
         
         if (conn.label) {
           const midX = (from.x + to.x) / 2 + offsetX;
