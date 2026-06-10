@@ -84,6 +84,12 @@
       color: #24292e;
     }
 
+    .divider {
+      height: 1px;
+      background: #e1e4e8;
+      margin: 20px 0;
+    }
+
     /* Canvas central */
     .canvas-wrapper {
       flex: 1;
@@ -99,6 +105,7 @@
       display: flex;
       gap: 10px;
       align-items: center;
+      flex-wrap: wrap;
     }
 
     .btn {
@@ -147,6 +154,36 @@
       background: #cb2431;
     }
 
+    .arrow-type-selector {
+      display: flex;
+      gap: 5px;
+      padding: 4px;
+      background: #f6f8fa;
+      border-radius: 6px;
+      border: 1px solid #e1e4e8;
+    }
+
+    .arrow-type-btn {
+      padding: 6px 12px;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      background: transparent;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+
+    .arrow-type-btn:hover {
+      background: white;
+    }
+
+    .arrow-type-btn.active {
+      background: white;
+      border-color: #0366d6;
+      color: #0366d6;
+      font-weight: 600;
+    }
+
     #canvas {
       flex: 1;
       position: relative;
@@ -166,7 +203,7 @@
     .node {
       position: absolute;
       min-width: 120px;
-      padding: 15px;
+      padding: 15px 20px;
       border: 2px solid #0366d6;
       border-radius: 8px;
       background: white;
@@ -188,6 +225,11 @@
 
     .node.selected {
       box-shadow: 0 0 0 3px rgba(3, 102, 214, 0.3);
+      z-index: 11;
+    }
+
+    .node.connecting {
+      box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.5);
       z-index: 11;
     }
 
@@ -235,6 +277,28 @@
       background: inherit;
     }
 
+    /* Point de connexion central */
+    .connection-point {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      background: #28a745;
+      border: 2px solid white;
+      border-radius: 50%;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+      z-index: 100;
+    }
+
+    .node:hover .connection-point,
+    .node.connecting .connection-point {
+      opacity: 1;
+    }
+
     /* Connexions */
     svg.connections {
       position: absolute;
@@ -250,17 +314,34 @@
       stroke: #586069;
       stroke-width: 2;
       fill: none;
-      marker-end: url(#arrowhead);
+      pointer-events: stroke;
+      cursor: pointer;
+    }
+
+    .connection-line:hover {
+      stroke: #0366d6;
+      stroke-width: 3;
+    }
+
+    .connection-line.selected {
+      stroke: #0366d6;
+      stroke-width: 3;
     }
 
     .connection-label {
       font-size: 12px;
       fill: #586069;
-      background: white;
-      padding: 2px 6px;
+      pointer-events: none;
+      font-weight: 600;
     }
 
-    /* Panneau propriétés */
+    .connection-label-bg {
+      fill: white;
+      stroke: #e1e4e8;
+      stroke-width: 1;
+    }
+
+    /* Propriétés */
     .properties {
       width: 280px;
       background: white;
@@ -288,7 +369,8 @@
     }
 
     .prop-group input[type="text"],
-    .prop-group textarea {
+    .prop-group textarea,
+    .prop-group select {
       width: 100%;
       padding: 8px 12px;
       border: 1px solid #e1e4e8;
@@ -338,12 +420,38 @@
       margin-top: 40px;
     }
 
-    /* Indicateur de connexion */
-    .connecting-line {
-      stroke: #0366d6;
-      stroke-width: 2;
-      stroke-dasharray: 5, 5;
-      fill: none;
+    .arrow-preview {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+      padding: 10px;
+      background: #f6f8fa;
+      border-radius: 6px;
+    }
+
+    .arrow-preview-item {
+      flex: 1;
+      text-align: center;
+      padding: 8px;
+      border: 2px solid #e1e4e8;
+      border-radius: 4px;
+      background: white;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .arrow-preview-item:hover {
+      border-color: #0366d6;
+    }
+
+    .arrow-preview-item.selected {
+      border-color: #0366d6;
+      background: #f1f8ff;
+    }
+
+    .arrow-preview svg {
+      display: block;
+      margin: 0 auto;
     }
   </style>
 </head>
@@ -398,6 +506,60 @@
         </div>
         <div class="shape-label">Document</div>
       </div>
+
+      <div class="divider"></div>
+
+      <h3>➜ Types de flèches</h3>
+      
+      <div class="arrow-preview">
+        <div class="arrow-preview-item selected" data-arrow="simple">
+          <svg width="50" height="20" viewBox="0 0 50 20">
+            <defs>
+              <marker id="preview-simple" markerWidth="8" markerHeight="8" refX="7" refY="2.5" orient="auto">
+                <polygon points="0 0, 8 2.5, 0 5" fill="#586069"/>
+              </marker>
+            </defs>
+            <line x1="5" y1="10" x2="45" y2="10" stroke="#586069" stroke-width="2" marker-end="url(#preview-simple)"/>
+          </svg>
+          <div style="font-size: 10px; margin-top: 4px;">Simple</div>
+        </div>
+        <div class="arrow-preview-item" data-arrow="double">
+          <svg width="50" height="20" viewBox="0 0 50 20">
+            <defs>
+              <marker id="preview-double" markerWidth="8" markerHeight="8" refX="7" refY="2.5" orient="auto">
+                <polygon points="0 0, 8 2.5, 0 5" fill="#586069"/>
+              </marker>
+            </defs>
+            <line x1="5" y1="10" x2="45" y2="10" stroke="#586069" stroke-width="2" marker-end="url(#preview-double)" marker-start="url(#preview-double)"/>
+          </svg>
+          <div style="font-size: 10px; margin-top: 4px;">Double</div>
+        </div>
+      </div>
+
+      <div class="arrow-preview">
+        <div class="arrow-preview-item" data-arrow="dashed">
+          <svg width="50" height="20" viewBox="0 0 50 20">
+            <defs>
+              <marker id="preview-dashed" markerWidth="8" markerHeight="8" refX="7" refY="2.5" orient="auto">
+                <polygon points="0 0, 8 2.5, 0 5" fill="#586069"/>
+              </marker>
+            </defs>
+            <line x1="5" y1="10" x2="45" y2="10" stroke="#586069" stroke-width="2" stroke-dasharray="4,3" marker-end="url(#preview-dashed)"/>
+          </svg>
+          <div style="font-size: 10px; margin-top: 4px;">Pointillé</div>
+        </div>
+        <div class="arrow-preview-item" data-arrow="thick">
+          <svg width="50" height="20" viewBox="0 0 50 20">
+            <defs>
+              <marker id="preview-thick" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+                <polygon points="0 0, 10 3, 0 6" fill="#586069"/>
+              </marker>
+            </defs>
+            <line x1="5" y1="10" x2="45" y2="10" stroke="#586069" stroke-width="3" marker-end="url(#preview-thick)"/>
+          </svg>
+          <div style="font-size: 10px; margin-top: 4px;">Épaisse</div>
+        </div>
+      </div>
     </div>
 
     <!-- Zone centrale -->
@@ -405,8 +567,14 @@
       <div class="top-toolbar">
         <button class="btn" id="arrowBtn">
           <span>➜</span>
-          Flèche
+          Créer flèche
         </button>
+        <div class="arrow-type-selector" id="arrowTypeSelector" style="display: none;">
+          <button class="arrow-type-btn active" data-type="simple">Simple</button>
+          <button class="arrow-type-btn" data-type="double">Double</button>
+          <button class="arrow-type-btn" data-type="dashed">Pointillé</button>
+          <button class="arrow-type-btn" data-type="thick">Épaisse</button>
+        </div>
         <button class="btn" id="undoBtn">
           <span>↶</span>
           Annuler
@@ -424,8 +592,17 @@
       <div id="canvas">
         <svg class="connections" id="connectionsSvg">
           <defs>
-            <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+            <marker id="arrowSimple" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
               <polygon points="0 0, 10 3, 0 6" fill="#586069"/>
+            </marker>
+            <marker id="arrowSimple-selected" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+              <polygon points="0 0, 10 3, 0 6" fill="#0366d6"/>
+            </marker>
+            <marker id="arrowThick" markerWidth="12" markerHeight="12" refX="10" refY="4" orient="auto">
+              <polygon points="0 0, 12 4, 0 8" fill="#586069"/>
+            </marker>
+            <marker id="arrowThick-selected" markerWidth="12" markerHeight="12" refX="10" refY="4" orient="auto">
+              <polygon points="0 0, 12 4, 0 8" fill="#0366d6"/>
             </marker>
           </defs>
         </svg>
@@ -447,9 +624,9 @@
       connections: [],
       selectedNode: null,
       selectedConnection: null,
-      draggedNode: null,
       arrowMode: false,
       arrowStart: null,
+      currentArrowType: 'simple',
       history: [],
       nodeCounter: 0,
       connectionCounter: 0
@@ -460,6 +637,7 @@
     const connectionsSvg = document.getElementById('connectionsSvg');
     const properties = document.getElementById('properties');
     const arrowBtn = document.getElementById('arrowBtn');
+    const arrowTypeSelector = document.getElementById('arrowTypeSelector');
     const undoBtn = document.getElementById('undoBtn');
     const clearBtn = document.getElementById('clearBtn');
     const exportBtn = document.getElementById('exportBtn');
@@ -478,6 +656,24 @@
       io: { label: 'Entrée/Sortie', color: '#10b981' },
       document: { label: 'Document', color: '#8b5cf6' }
     };
+
+    // Sélection du type de flèche dans la barre latérale
+    document.querySelectorAll('.arrow-preview-item').forEach(item => {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.arrow-preview-item').forEach(i => i.classList.remove('selected'));
+        item.classList.add('selected');
+        state.currentArrowType = item.dataset.arrow;
+      });
+    });
+
+    // Sélection du type de flèche dans la barre du haut
+    document.querySelectorAll('.arrow-type-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.arrow-type-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        state.currentArrowType = btn.dataset.type;
+      });
+    });
 
     // Sauvegarder l'état dans l'historique
     function saveHistory() {
@@ -535,7 +731,9 @@
           x: e.clientX - rect.left + canvas.scrollLeft - 60,
           y: e.clientY - rect.top + canvas.scrollTop - 20,
           text: nodeTypes[nodeType].label,
-          color: nodeTypes[nodeType].color
+          color: nodeTypes[nodeType].color,
+          width: 120,
+          height: 40
         };
         state.nodes.push(node);
         render();
@@ -546,9 +744,11 @@
     arrowBtn.addEventListener('click', () => {
       state.arrowMode = !state.arrowMode;
       arrowBtn.classList.toggle('active', state.arrowMode);
+      arrowTypeSelector.style.display = state.arrowMode ? 'flex' : 'none';
       canvas.classList.toggle('arrow-mode', state.arrowMode);
       if (!state.arrowMode) {
         state.arrowStart = null;
+        document.querySelectorAll('.node').forEach(n => n.classList.remove('connecting'));
       }
     });
 
@@ -568,6 +768,11 @@
       textSpan.textContent = node.text;
       div.appendChild(textSpan);
 
+      // Point de connexion central
+      const connectionPoint = document.createElement('div');
+      connectionPoint.className = 'connection-point';
+      div.appendChild(connectionPoint);
+
       // Sélection
       div.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -575,19 +780,18 @@
         if (state.arrowMode) {
           if (!state.arrowStart) {
             state.arrowStart = node;
-            div.style.boxShadow = '0 0 0 3px rgba(3, 102, 214, 0.5)';
+            div.classList.add('connecting');
           } else if (state.arrowStart.id !== node.id) {
             saveHistory();
             state.connections.push({
               id: ++state.connectionCounter,
               from: state.arrowStart.id,
               to: node.id,
-              label: ''
+              label: '',
+              arrowType: state.currentArrowType
             });
+            document.querySelectorAll('.node').forEach(n => n.classList.remove('connecting'));
             state.arrowStart = null;
-            state.arrowMode = false;
-            arrowBtn.classList.remove('active');
-            canvas.classList.remove('arrow-mode');
             render();
           }
         } else {
@@ -629,6 +833,13 @@
         div.classList.add('selected');
       }
 
+      // Stocker les dimensions après le rendu
+      setTimeout(() => {
+        const rect = div.getBoundingClientRect();
+        node.width = rect.width;
+        node.height = rect.height;
+      }, 0);
+
       return div;
     }
 
@@ -643,7 +854,7 @@
     // Obtenir le centre d'un nœud
     function getNodeCenter(node) {
       const el = document.querySelector(`[data-id="${node.id}"]`);
-      if (!el) return { x: node.x, y: node.y };
+      if (!el) return { x: node.x + 60, y: node.y + 20 };
       const rect = el.getBoundingClientRect();
       const canvasRect = canvas.getBoundingClientRect();
       return {
@@ -652,9 +863,9 @@
       };
     }
 
-    // Dessiner les connexions
+    // Dessiner les connexions (toujours droites)
     function renderConnections() {
-      connectionsSvg.querySelectorAll('.connection-line, .connection-label').forEach(el => el.remove());
+      connectionsSvg.querySelectorAll('.connection-line, .connection-label, .connection-label-bg').forEach(el => el.remove());
 
       state.connections.forEach(conn => {
         const fromNode = state.nodes.find(n => n.id === conn.from);
@@ -664,33 +875,72 @@
         const from = getNodeCenter(fromNode);
         const to = getNodeCenter(toNode);
 
-        // Ligne courbe
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        const midX = (from.x + to.x) / 2;
-        const midY = (from.y + to.y) / 2;
-        const dx = to.x - from.x;
-        const dy = to.y - from.y;
-        const offset = 30;
-        const ctrlX = midX + (dy > 0 ? offset : -offset);
-        const ctrlY = midY - (dx > 0 ? offset : -offset);
+        const isSelected = state.selectedConnection && state.selectedConnection.id === conn.id;
 
-        path.setAttribute('d', `M ${from.x} ${from.y} Q ${ctrlX} ${ctrlY} ${to.x} ${to.y}`);
-        path.classList.add('connection-line');
-        path.style.cursor = 'pointer';
+        // Ligne droite
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', from.x);
+        line.setAttribute('y1', from.y);
+        line.setAttribute('x2', to.x);
+        line.setAttribute('y2', to.y);
+        line.classList.add('connection-line');
         
-        path.addEventListener('click', (e) => {
+        if (isSelected) {
+          line.classList.add('selected');
+        }
+
+        // Appliquer le style selon le type de flèche
+        switch (conn.arrowType) {
+          case 'simple':
+            line.setAttribute('stroke-width', '2');
+            line.setAttribute('marker-end', isSelected ? 'url(#arrowSimple-selected)' : 'url(#arrowSimple)');
+            break;
+          case 'double':
+            line.setAttribute('stroke-width', '2');
+            line.setAttribute('marker-end', isSelected ? 'url(#arrowSimple-selected)' : 'url(#arrowSimple)');
+            line.setAttribute('marker-start', isSelected ? 'url(#arrowSimple-selected)' : 'url(#arrowSimple)');
+            break;
+          case 'dashed':
+            line.setAttribute('stroke-width', '2');
+            line.setAttribute('stroke-dasharray', '5,4');
+            line.setAttribute('marker-end', isSelected ? 'url(#arrowSimple-selected)' : 'url(#arrowSimple)');
+            break;
+          case 'thick':
+            line.setAttribute('stroke-width', '4');
+            line.setAttribute('marker-end', isSelected ? 'url(#arrowThick-selected)' : 'url(#arrowThick)');
+            break;
+        }
+
+        line.style.pointerEvents = 'stroke';
+        line.addEventListener('click', (e) => {
           e.stopPropagation();
           selectConnection(conn);
         });
 
-        connectionsSvg.appendChild(path);
+        connectionsSvg.appendChild(line);
 
-        // Label
+        // Label au milieu
         if (conn.label) {
+          const midX = (from.x + to.x) / 2;
+          const midY = (from.y + to.y) / 2;
+
+          // Fond du label
+          const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          const textWidth = conn.label.length * 7 + 10;
+          bg.setAttribute('x', midX - textWidth / 2);
+          bg.setAttribute('y', midY - 16);
+          bg.setAttribute('width', textWidth);
+          bg.setAttribute('height', 20);
+          bg.setAttribute('rx', '4');
+          bg.classList.add('connection-label-bg');
+          connectionsSvg.appendChild(bg);
+
+          // Texte
           const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-          text.setAttribute('x', ctrlX);
-          text.setAttribute('y', ctrlY - 5);
+          text.setAttribute('x', midX);
+          text.setAttribute('y', midY);
           text.setAttribute('text-anchor', 'middle');
+          text.setAttribute('dominant-baseline', 'middle');
           text.classList.add('connection-label');
           text.textContent = conn.label;
           connectionsSvg.appendChild(text);
@@ -768,12 +1018,27 @@
           </div>
 
           <div class="prop-group">
+            <label>Type de flèche</label>
+            <select id="connArrowType">
+              <option value="simple" ${conn.arrowType === 'simple' ? 'selected' : ''}>Simple</option>
+              <option value="double" ${conn.arrowType === 'double' ? 'selected' : ''}>Double</option>
+              <option value="dashed" ${conn.arrowType === 'dashed' ? 'selected' : ''}>Pointillé</option>
+              <option value="thick" ${conn.arrowType === 'thick' ? 'selected' : ''}>Épaisse</option>
+            </select>
+          </div>
+
+          <div class="prop-group">
             <button class="btn btn-clear" style="width:100%" id="deleteConn">🗑 Supprimer la connexion</button>
           </div>
         `;
 
         document.getElementById('connLabel').addEventListener('input', (e) => {
           conn.label = e.target.value;
+          renderConnections();
+        });
+
+        document.getElementById('connArrowType').addEventListener('change', (e) => {
+          conn.arrowType = e.target.value;
           renderConnections();
         });
 
@@ -795,18 +1060,11 @@
 
     // Rendu complet
     function render() {
-      // Nettoyer les nœuds
       canvas.querySelectorAll('.node').forEach(el => el.remove());
-
-      // Recréer les nœuds
       state.nodes.forEach(node => {
         canvas.appendChild(createNodeElement(node));
       });
-
-      // Redessiner les connexions
       renderConnections();
-
-      // Rafraîchir les propriétés
       if (state.selectedNode || state.selectedConnection) {
         renderProperties();
       }
@@ -824,7 +1082,6 @@
 
     // Export SVG
     exportBtn.addEventListener('click', () => {
-      // Calculer les dimensions
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       
       state.nodes.forEach(node => {
@@ -850,12 +1107,14 @@
     <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
       <polygon points="0 0, 10 3, 0 6" fill="#586069"/>
     </marker>
+    <marker id="arrowThickExport" markerWidth="12" markerHeight="12" refX="10" refY="4" orient="auto">
+      <polygon points="0 0, 12 4, 0 8" fill="#586069"/>
+    </marker>
   </defs>
   
   <!-- Connexions -->
 `;
 
-      // Ajouter les connexions
       state.connections.forEach(conn => {
         const fromNode = state.nodes.find(n => n.id === conn.from);
         const toNode = state.nodes.find(n => n.id === conn.to);
@@ -866,16 +1125,34 @@
         const midX = (from.x + to.x) / 2 + offsetX;
         const midY = (from.y + to.y) / 2 + offsetY;
 
-        svg += `  <path d="M ${from.x + offsetX} ${from.y + offsetY} L ${to.x + offsetX} ${to.y + offsetY}" stroke="#586069" stroke-width="2" fill="none" marker-end="url(#arrow)"/>\n`;
+        let lineAttrs = `x1="${from.x + offsetX}" y1="${from.y + offsetY}" x2="${to.x + offsetX}" y2="${to.y + offsetY}" stroke="#586069" fill="none"`;
+        
+        switch (conn.arrowType) {
+          case 'simple':
+            lineAttrs += ` stroke-width="2" marker-end="url(#arrow)"`;
+            break;
+          case 'double':
+            lineAttrs += ` stroke-width="2" marker-end="url(#arrow)" marker-start="url(#arrow)"`;
+            break;
+          case 'dashed':
+            lineAttrs += ` stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow)"`;
+            break;
+          case 'thick':
+            lineAttrs += ` stroke-width="4" marker-end="url(#arrowThickExport)"`;
+            break;
+        }
+
+        svg += `  <line ${lineAttrs}/>\n`;
         
         if (conn.label) {
-          svg += `  <text x="${midX}" y="${midY - 5}" text-anchor="middle" font-size="12" fill="#586069">${conn.label}</text>\n`;
+          const textWidth = conn.label.length * 7 + 10;
+          svg += `  <rect x="${midX - textWidth/2}" y="${midY - 16}" width="${textWidth}" height="20" rx="4" fill="white" stroke="#e1e4e8"/>\n`;
+          svg += `  <text x="${midX}" y="${midY}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="600" fill="#586069">${conn.label}</text>\n`;
         }
       });
 
       svg += `\n  <!-- Nœuds -->\n`;
 
-      // Ajouter les nœuds
       state.nodes.forEach(node => {
         const el = document.querySelector(`[data-id="${node.id}"]`);
         if (!el) return;
@@ -907,12 +1184,11 @@
             break;
         }
 
-        svg += `  <text x="${x + w/2}" y="${y + h/2 + 5}" text-anchor="middle" font-size="13" font-weight="500" fill="${textColor}">${node.text}</text>\n`;
+        svg += `  <text x="${x + w/2}" y="${y + h/2}" text-anchor="middle" dominant-baseline="middle" font-size="13" font-weight="500" fill="${textColor}">${node.text}</text>\n`;
       });
 
       svg += `</svg>`;
 
-      // Télécharger
       const blob = new Blob([svg], { type: 'image/svg+xml' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -922,7 +1198,6 @@
       URL.revokeObjectURL(url);
     });
 
-    // Initialisation
     render();
   </script>
 </body>
