@@ -235,9 +235,6 @@
 
     .node.terminal {
       border-radius: 50px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      color: white;
-      border-color: #667eea;
     }
 
     .node.process {
@@ -277,27 +274,44 @@
       background: inherit;
     }
 
-    /* Point de connexion central */
-    .connection-point {
+    /* Points d'ancrage multiples */
+    .anchor-points {
       position: absolute;
-      width: 8px;
-      height: 8px;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .anchor-point {
+      position: absolute;
+      width: 10px;
+      height: 10px;
       background: #28a745;
       border: 2px solid white;
       border-radius: 50%;
-      top: 50%;
-      left: 50%;
       transform: translate(-50%, -50%);
       opacity: 0;
       transition: opacity 0.2s;
-      pointer-events: none;
+      cursor: crosshair;
+      pointer-events: auto;
       z-index: 100;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     }
 
-    .node:hover .connection-point,
-    .node.connecting .connection-point {
+    .anchor-point:hover {
+      background: #22863a;
+      transform: translate(-50%, -50%) scale(1.3);
+    }
+
+    .node:hover .anchor-point,
+    .node.connecting .anchor-point {
       opacity: 1;
     }
+
+    .anchor-point.center { left: 50%; top: 50%; }
+    .anchor-point.top { left: 50%; top: 0%; }
+    .anchor-point.right { left: 100%; top: 50%; }
+    .anchor-point.bottom { left: 50%; top: 100%; }
+    .anchor-point.left { left: 0%; top: 50%; }
 
     /* Connexions */
     svg.connections {
@@ -343,7 +357,7 @@
 
     /* Propriétés */
     .properties {
-      width: 280px;
+      width: 300px;
       background: white;
       border-left: 1px solid #e1e4e8;
       padding: 20px;
@@ -421,16 +435,13 @@
     }
 
     .arrow-preview {
-      display: flex;
-      gap: 10px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
       margin-top: 10px;
-      padding: 10px;
-      background: #f6f8fa;
-      border-radius: 6px;
     }
 
     .arrow-preview-item {
-      flex: 1;
       text-align: center;
       padding: 8px;
       border: 2px solid #e1e4e8;
@@ -452,6 +463,12 @@
     .arrow-preview svg {
       display: block;
       margin: 0 auto;
+    }
+
+    .color-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
     }
   </style>
 </head>
@@ -509,7 +526,7 @@
 
       <div class="divider"></div>
 
-      <h3>➜ Types de flèches</h3>
+      <h3>➜ Types de connexions</h3>
       
       <div class="arrow-preview">
         <div class="arrow-preview-item selected" data-arrow="simple">
@@ -521,8 +538,16 @@
             </defs>
             <line x1="5" y1="10" x2="45" y2="10" stroke="#586069" stroke-width="2" marker-end="url(#preview-simple)"/>
           </svg>
-          <div style="font-size: 10px; margin-top: 4px;">Simple</div>
+          <div style="font-size: 10px; margin-top: 4px;">Flèche</div>
         </div>
+        
+        <div class="arrow-preview-item" data-arrow="line">
+          <svg width="50" height="20" viewBox="0 0 50 20">
+            <line x1="5" y1="10" x2="45" y2="10" stroke="#586069" stroke-width="2"/>
+          </svg>
+          <div style="font-size: 10px; margin-top: 4px;">Trait</div>
+        </div>
+
         <div class="arrow-preview-item" data-arrow="double">
           <svg width="50" height="20" viewBox="0 0 50 20">
             <defs>
@@ -534,9 +559,7 @@
           </svg>
           <div style="font-size: 10px; margin-top: 4px;">Double</div>
         </div>
-      </div>
-
-      <div class="arrow-preview">
+        
         <div class="arrow-preview-item" data-arrow="dashed">
           <svg width="50" height="20" viewBox="0 0 50 20">
             <defs>
@@ -548,6 +571,7 @@
           </svg>
           <div style="font-size: 10px; margin-top: 4px;">Pointillé</div>
         </div>
+
         <div class="arrow-preview-item" data-arrow="thick">
           <svg width="50" height="20" viewBox="0 0 50 20">
             <defs>
@@ -567,10 +591,11 @@
       <div class="top-toolbar">
         <button class="btn" id="arrowBtn">
           <span>➜</span>
-          Créer flèche
+          Créer connexion
         </button>
         <div class="arrow-type-selector" id="arrowTypeSelector" style="display: none;">
-          <button class="arrow-type-btn active" data-type="simple">Simple</button>
+          <button class="arrow-type-btn active" data-type="simple">Flèche</button>
+          <button class="arrow-type-btn" data-type="line">Trait</button>
           <button class="arrow-type-btn" data-type="double">Double</button>
           <button class="arrow-type-btn" data-type="dashed">Pointillé</button>
           <button class="arrow-type-btn" data-type="thick">Épaisse</button>
@@ -626,6 +651,7 @@
       selectedConnection: null,
       arrowMode: false,
       arrowStart: null,
+      arrowStartAnchor: null,
       currentArrowType: 'simple',
       history: [],
       nodeCounter: 0,
@@ -650,11 +676,11 @@
 
     // Configuration des types de nœuds
     const nodeTypes = {
-      terminal: { label: 'Début/Fin', color: '#667eea' },
-      process: { label: 'Processus', color: '#0366d6' },
-      decision: { label: 'Décision', color: '#f59e0b' },
-      io: { label: 'Entrée/Sortie', color: '#10b981' },
-      document: { label: 'Document', color: '#8b5cf6' }
+      terminal: { label: 'Début/Fin', color: '#667eea', fill: '#667eea' },
+      process: { label: 'Processus', color: '#0366d6', fill: 'transparent' },
+      decision: { label: 'Décision', color: '#f59e0b', fill: 'transparent' },
+      io: { label: 'Entrée/Sortie', color: '#10b981', fill: 'transparent' },
+      document: { label: 'Document', color: '#8b5cf6', fill: 'transparent' }
     };
 
     // Sélection du type de flèche dans la barre latérale
@@ -731,7 +757,8 @@
           x: e.clientX - rect.left + canvas.scrollLeft - 60,
           y: e.clientY - rect.top + canvas.scrollTop - 20,
           text: nodeTypes[nodeType].label,
-          color: nodeTypes[nodeType].color,
+          borderColor: nodeTypes[nodeType].color,
+          fillColor: nodeTypes[nodeType].fill,
           width: 120,
           height: 40
         };
@@ -748,9 +775,31 @@
       canvas.classList.toggle('arrow-mode', state.arrowMode);
       if (!state.arrowMode) {
         state.arrowStart = null;
+        state.arrowStartAnchor = null;
         document.querySelectorAll('.node').forEach(n => n.classList.remove('connecting'));
       }
     });
+
+    // Calculer la position d'un point d'ancrage
+    function getAnchorPosition(node, anchor) {
+      const el = document.querySelector(`[data-id="${node.id}"]`);
+      if (!el) return { x: node.x + 60, y: node.y + 20 };
+      
+      const rect = el.getBoundingClientRect();
+      const canvasRect = canvas.getBoundingClientRect();
+      const baseX = rect.left - canvasRect.left + canvas.scrollLeft;
+      const baseY = rect.top - canvasRect.top + canvas.scrollTop;
+      
+      const positions = {
+        center: { x: baseX + rect.width / 2, y: baseY + rect.height / 2 },
+        top: { x: baseX + rect.width / 2, y: baseY },
+        right: { x: baseX + rect.width, y: baseY + rect.height / 2 },
+        bottom: { x: baseX + rect.width / 2, y: baseY + rect.height },
+        left: { x: baseX, y: baseY + rect.height / 2 }
+      };
+      
+      return positions[anchor] || positions.center;
+    }
 
     // Créer un nœud DOM
     function createNodeElement(node) {
@@ -758,9 +807,20 @@
       div.className = `node ${node.type}`;
       div.style.left = node.x + 'px';
       div.style.top = node.y + 'px';
-      div.style.borderColor = node.color;
-      div.style.backgroundColor = node.type === 'terminal' ? node.color : 'white';
-      div.style.color = node.type === 'terminal' ? 'white' : '#24292e';
+      div.style.borderColor = node.borderColor;
+      
+      // Appliquer la couleur de remplissage
+      if (node.fillColor && node.fillColor !== 'transparent') {
+        div.style.backgroundColor = node.fillColor;
+        // Adapter la couleur du texte selon la luminosité du fond
+        const rgb = hexToRgb(node.fillColor);
+        const brightness = (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000;
+        div.style.color = brightness > 128 ? '#24292e' : 'white';
+      } else {
+        div.style.backgroundColor = 'white';
+        div.style.color = '#24292e';
+      }
+      
       div.dataset.id = node.id;
 
       const textSpan = document.createElement('span');
@@ -768,33 +828,51 @@
       textSpan.textContent = node.text;
       div.appendChild(textSpan);
 
-      // Point de connexion central
-      const connectionPoint = document.createElement('div');
-      connectionPoint.className = 'connection-point';
-      div.appendChild(connectionPoint);
-
-      // Sélection
-      div.addEventListener('click', (e) => {
-        e.stopPropagation();
+      // Points d'ancrage
+      const anchorPoints = document.createElement('div');
+      anchorPoints.className = 'anchor-points';
+      
+      ['center', 'top', 'right', 'bottom', 'left'].forEach(anchor => {
+        const point = document.createElement('div');
+        point.className = `anchor-point ${anchor}`;
+        point.dataset.anchor = anchor;
         
-        if (state.arrowMode) {
-          if (!state.arrowStart) {
-            state.arrowStart = node;
-            div.classList.add('connecting');
-          } else if (state.arrowStart.id !== node.id) {
-            saveHistory();
-            state.connections.push({
-              id: ++state.connectionCounter,
-              from: state.arrowStart.id,
-              to: node.id,
-              label: '',
-              arrowType: state.currentArrowType
-            });
-            document.querySelectorAll('.node').forEach(n => n.classList.remove('connecting'));
-            state.arrowStart = null;
-            render();
+        point.addEventListener('click', (e) => {
+          e.stopPropagation();
+          
+          if (state.arrowMode) {
+            if (!state.arrowStart) {
+              state.arrowStart = node;
+              state.arrowStartAnchor = anchor;
+              div.classList.add('connecting');
+            } else if (state.arrowStart.id !== node.id) {
+              saveHistory();
+              state.connections.push({
+                id: ++state.connectionCounter,
+                from: state.arrowStart.id,
+                fromAnchor: state.arrowStartAnchor,
+                to: node.id,
+                toAnchor: anchor,
+                label: '',
+                arrowType: state.currentArrowType
+              });
+              document.querySelectorAll('.node').forEach(n => n.classList.remove('connecting'));
+              state.arrowStart = null;
+              state.arrowStartAnchor = null;
+              render();
+            }
           }
-        } else {
+        });
+        
+        anchorPoints.appendChild(point);
+      });
+      
+      div.appendChild(anchorPoints);
+
+      // Sélection du nœud (clic sur le texte)
+      textSpan.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!state.arrowMode) {
           selectNode(node);
         }
       });
@@ -804,7 +882,7 @@
       let startX, startY;
 
       div.addEventListener('mousedown', (e) => {
-        if (state.arrowMode) return;
+        if (state.arrowMode || e.target.classList.contains('anchor-point')) return;
         isDragging = true;
         startX = e.clientX - node.x;
         startY = e.clientY - node.y;
@@ -843,6 +921,16 @@
       return div;
     }
 
+    // Convertir hex en RGB
+    function hexToRgb(hex) {
+      const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+      } : { r: 255, g: 255, b: 255 };
+    }
+
     // Sélectionner un nœud
     function selectNode(node) {
       state.selectedNode = node;
@@ -851,19 +939,7 @@
       render();
     }
 
-    // Obtenir le centre d'un nœud
-    function getNodeCenter(node) {
-      const el = document.querySelector(`[data-id="${node.id}"]`);
-      if (!el) return { x: node.x + 60, y: node.y + 20 };
-      const rect = el.getBoundingClientRect();
-      const canvasRect = canvas.getBoundingClientRect();
-      return {
-        x: rect.left - canvasRect.left + rect.width / 2 + canvas.scrollLeft,
-        y: rect.top - canvasRect.top + rect.height / 2 + canvas.scrollTop
-      };
-    }
-
-    // Dessiner les connexions (toujours droites)
+    // Dessiner les connexions
     function renderConnections() {
       connectionsSvg.querySelectorAll('.connection-line, .connection-label, .connection-label-bg').forEach(el => el.remove());
 
@@ -872,8 +948,8 @@
         const toNode = state.nodes.find(n => n.id === conn.to);
         if (!fromNode || !toNode) return;
 
-        const from = getNodeCenter(fromNode);
-        const to = getNodeCenter(toNode);
+        const from = getAnchorPosition(fromNode, conn.fromAnchor);
+        const to = getAnchorPosition(toNode, conn.toAnchor);
 
         const isSelected = state.selectedConnection && state.selectedConnection.id === conn.id;
 
@@ -889,11 +965,15 @@
           line.classList.add('selected');
         }
 
-        // Appliquer le style selon le type de flèche
+        // Appliquer le style selon le type de connexion
         switch (conn.arrowType) {
           case 'simple':
             line.setAttribute('stroke-width', '2');
             line.setAttribute('marker-end', isSelected ? 'url(#arrowSimple-selected)' : 'url(#arrowSimple)');
+            break;
+          case 'line':
+            line.setAttribute('stroke-width', '2');
+            // Pas de marker
             break;
           case 'double':
             line.setAttribute('stroke-width', '2');
@@ -969,8 +1049,27 @@
           </div>
 
           <div class="prop-group">
-            <label>Couleur</label>
-            <input type="color" id="nodeColor" value="${node.color}">
+            <label>Couleurs</label>
+            <div class="color-row">
+              <div>
+                <label style="font-size: 11px; margin-bottom: 4px;">Bordure</label>
+                <input type="color" id="nodeBorderColor" value="${node.borderColor}">
+              </div>
+              <div>
+                <label style="font-size: 11px; margin-bottom: 4px;">Remplissage</label>
+                <input type="color" id="nodeFillColor" value="${node.fillColor === 'transparent' ? '#ffffff' : node.fillColor}">
+              </div>
+            </div>
+            <div style="margin-top: 8px;">
+              <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <input type="checkbox" id="nodeTransparent" ${node.fillColor === 'transparent' ? 'checked' : ''}>
+                <span style="font-size: 12px;">Fond transparent</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="prop-group">
+            <label>Couleurs rapides</label>
             <div class="color-presets">
               ${colorPresets.map(c => `<div class="color-preset" style="background:${c}" data-color="${c}"></div>`).join('')}
             </div>
@@ -986,15 +1085,35 @@
           render();
         });
 
-        document.getElementById('nodeColor').addEventListener('input', (e) => {
-          node.color = e.target.value;
+        document.getElementById('nodeBorderColor').addEventListener('input', (e) => {
+          node.borderColor = e.target.value;
+          render();
+        });
+
+        document.getElementById('nodeFillColor').addEventListener('input', (e) => {
+          if (!document.getElementById('nodeTransparent').checked) {
+            node.fillColor = e.target.value;
+            render();
+          }
+        });
+
+        document.getElementById('nodeTransparent').addEventListener('change', (e) => {
+          if (e.target.checked) {
+            node.fillColor = 'transparent';
+          } else {
+            node.fillColor = document.getElementById('nodeFillColor').value;
+          }
           render();
         });
 
         document.querySelectorAll('.color-preset').forEach(preset => {
           preset.addEventListener('click', () => {
-            node.color = preset.dataset.color;
-            document.getElementById('nodeColor').value = node.color;
+            node.borderColor = preset.dataset.color;
+            if (!document.getElementById('nodeTransparent').checked) {
+              node.fillColor = preset.dataset.color;
+              document.getElementById('nodeFillColor').value = preset.dataset.color;
+            }
+            document.getElementById('nodeBorderColor').value = preset.dataset.color;
             render();
           });
         });
@@ -1010,7 +1129,7 @@
       } else if (state.selectedConnection) {
         const conn = state.selectedConnection;
         properties.innerHTML = `
-          <h3>➜ Propriétés de la flèche</h3>
+          <h3>➜ Propriétés de la connexion</h3>
           
           <div class="prop-group">
             <label>Libellé (ex: Oui, Non...)</label>
@@ -1018,13 +1137,22 @@
           </div>
 
           <div class="prop-group">
-            <label>Type de flèche</label>
+            <label>Type de connexion</label>
             <select id="connArrowType">
-              <option value="simple" ${conn.arrowType === 'simple' ? 'selected' : ''}>Simple</option>
-              <option value="double" ${conn.arrowType === 'double' ? 'selected' : ''}>Double</option>
+              <option value="simple" ${conn.arrowType === 'simple' ? 'selected' : ''}>Flèche simple</option>
+              <option value="line" ${conn.arrowType === 'line' ? 'selected' : ''}>Trait simple</option>
+              <option value="double" ${conn.arrowType === 'double' ? 'selected' : ''}>Double flèche</option>
               <option value="dashed" ${conn.arrowType === 'dashed' ? 'selected' : ''}>Pointillé</option>
               <option value="thick" ${conn.arrowType === 'thick' ? 'selected' : ''}>Épaisse</option>
             </select>
+          </div>
+
+          <div class="prop-group">
+            <label>Points d'ancrage</label>
+            <div style="font-size: 12px; color: #586069; margin-bottom: 8px;">
+              Départ: <strong>${conn.fromAnchor}</strong><br>
+              Arrivée: <strong>${conn.toAnchor}</strong>
+            </div>
           </div>
 
           <div class="prop-group">
@@ -1120,8 +1248,8 @@
         const toNode = state.nodes.find(n => n.id === conn.to);
         if (!fromNode || !toNode) return;
 
-        const from = getNodeCenter(fromNode);
-        const to = getNodeCenter(toNode);
+        const from = getAnchorPosition(fromNode, conn.fromAnchor);
+        const to = getAnchorPosition(toNode, conn.toAnchor);
         const midX = (from.x + to.x) / 2 + offsetX;
         const midY = (from.y + to.y) / 2 + offsetY;
 
@@ -1130,6 +1258,9 @@
         switch (conn.arrowType) {
           case 'simple':
             lineAttrs += ` stroke-width="2" marker-end="url(#arrow)"`;
+            break;
+          case 'line':
+            lineAttrs += ` stroke-width="2"`;
             break;
           case 'double':
             lineAttrs += ` stroke-width="2" marker-end="url(#arrow)" marker-start="url(#arrow)"`;
@@ -1162,25 +1293,33 @@
         const h = rect.height;
         const x = node.x + offsetX;
         const y = node.y + offsetY;
-        const fill = node.type === 'terminal' ? node.color : 'white';
-        const textColor = node.type === 'terminal' ? 'white' : '#24292e';
+        const fill = node.fillColor === 'transparent' ? 'white' : node.fillColor;
+        const fillOpacity = node.fillColor === 'transparent' ? '0' : '1';
+        
+        // Déterminer la couleur du texte
+        let textColor = '#24292e';
+        if (node.fillColor !== 'transparent') {
+          const rgb = hexToRgb(node.fillColor);
+          const brightness = (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000;
+          textColor = brightness > 128 ? '#24292e' : 'white';
+        }
 
         switch (node.type) {
           case 'terminal':
-            svg += `  <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h/2}" fill="${fill}" stroke="${node.color}" stroke-width="2"/>\n`;
+            svg += `  <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${h/2}" fill="${fill}" fill-opacity="${fillOpacity}" stroke="${node.borderColor}" stroke-width="2"/>\n`;
             break;
           case 'process':
-            svg += `  <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="${fill}" stroke="${node.color}" stroke-width="2"/>\n`;
+            svg += `  <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="8" fill="${fill}" fill-opacity="${fillOpacity}" stroke="${node.borderColor}" stroke-width="2"/>\n`;
             break;
           case 'decision':
-            svg += `  <rect x="${x + w/2}" y="${y}" width="${Math.max(w,h)}" height="${Math.max(w,h)}" rx="8" fill="${fill}" stroke="${node.color}" stroke-width="2" transform="rotate(45 ${x + w/2} ${y + h/2})"/>\n`;
+            svg += `  <rect x="${x + w/2}" y="${y}" width="${Math.max(w,h)}" height="${Math.max(w,h)}" rx="8" fill="${fill}" fill-opacity="${fillOpacity}" stroke="${node.borderColor}" stroke-width="2" transform="rotate(45 ${x + w/2} ${y + h/2})"/>\n`;
             break;
           case 'io':
-            svg += `  <path d="M ${x + w*0.1} ${y} L ${x + w} ${y} L ${x + w*0.9} ${y + h} L ${x} ${y + h} Z" fill="${fill}" stroke="${node.color}" stroke-width="2"/>\n`;
+            svg += `  <path d="M ${x + w*0.1} ${y} L ${x + w} ${y} L ${x + w*0.9} ${y + h} L ${x} ${y + h} Z" fill="${fill}" fill-opacity="${fillOpacity}" stroke="${node.borderColor}" stroke-width="2"/>\n`;
             break;
           case 'document':
-            svg += `  <rect x="${x}" y="${y}" width="${w}" height="${h-10}" fill="${fill}" stroke="${node.color}" stroke-width="2"/>\n`;
-            svg += `  <path d="M ${x} ${y+h-10} Q ${x+w/4} ${y+h-5} ${x+w/2} ${y+h-10} T ${x+w} ${y+h-10} L ${x+w} ${y+h-6} Q ${x+3*w/4} ${y+h-11} ${x+w/2} ${y+h-6} T ${x} ${y+h-6} Z" fill="${fill}" stroke="${node.color}" stroke-width="2"/>\n`;
+            svg += `  <rect x="${x}" y="${y}" width="${w}" height="${h-10}" fill="${fill}" fill-opacity="${fillOpacity}" stroke="${node.borderColor}" stroke-width="2"/>\n`;
+            svg += `  <path d="M ${x} ${y+h-10} Q ${x+w/4} ${y+h-5} ${x+w/2} ${y+h-10} T ${x+w} ${y+h-10} L ${x+w} ${y+h-6} Q ${x+3*w/4} ${y+h-11} ${x+w/2} ${y+h-6} T ${x} ${y+h-6} Z" fill="${fill}" fill-opacity="${fillOpacity}" stroke="${node.borderColor}" stroke-width="2"/>\n`;
             break;
         }
 
