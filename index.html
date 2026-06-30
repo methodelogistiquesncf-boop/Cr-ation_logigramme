@@ -1165,6 +1165,54 @@
       render();
     });
 
+    // --- Déplacement à la souris de l'angle d'une connexion "Angle droit" ---
+    let draggingElbow = null;
+    let elbowDragMoved = false;
+    let elbowDragSnapshot = null;
+
+    document.addEventListener('mousemove', (e) => {
+      if (!draggingElbow) return;
+      elbowDragMoved = true;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left + canvas.scrollLeft;
+      const y = e.clientY - rect.top + canvas.scrollTop;
+      const { conn, useH, from, to } = draggingElbow;
+
+      let ratio;
+      if (useH) {
+        const span = to.x - from.x;
+        ratio = span !== 0 ? (x - from.x) / span : 0.5;
+      } else {
+        const span = to.y - from.y;
+        ratio = span !== 0 ? (y - from.y) / span : 0.5;
+      }
+      ratio = Math.max(0.02, Math.min(0.98, ratio));
+      conn.elbowMidRatio = ratio;
+      renderConnections();
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!draggingElbow) return;
+      const { conn, from, to } = draggingElbow;
+
+      if (!elbowDragMoved) {
+        // Pas de déplacement : un simple clic inverse le sens de l'angle (comportement précédent)
+        saveHistory();
+        const current = getElbowBend(from, to, conn.elbowBend, conn.fromAnchor, conn.toAnchor);
+        conn.elbowBend = current === 'h' ? 'v' : 'h';
+        conn.elbowMidRatio = 0.5;
+        renderConnections();
+        autosave();
+      } else if (elbowDragSnapshot) {
+        state.history.push(elbowDragSnapshot);
+        if (state.history.length > 50) state.history.shift();
+        autosave();
+      }
+
+      draggingElbow = null;
+      elbowDragSnapshot = null;
+    });
+
     function getAnchorPosition(node, anchor) {
       const positions = {
         center: { x: node.x + node.width / 2, y: node.y + node.height / 2 },
@@ -1221,11 +1269,12 @@
       return 'M ' + cleaned.map((p, i) => i === 0 ? `${p.x} ${p.y}` : `L ${p.x} ${p.y}`).join(' ');
     }
 
-    function generateElbowPath(from, to, bend, fromAnchor, toAnchor) {
+    function generateElbowPath(from, to, bend, fromAnchor, toAnchor, midRatio) {
       const dx = to.x - from.x;
       const dy = to.y - from.y;
-      const midX = from.x + dx / 2;
-      const midY = from.y + dy / 2;
+      const ratio = (typeof midRatio === 'number' && !isNaN(midRatio)) ? midRatio : 0.5;
+      const midX = from.x + dx * ratio;
+      const midY = from.y + dy * ratio;
       const useH = getElbowBend(from, to, bend, fromAnchor, toAnchor) === 'h';
 
       const points = useH
@@ -1469,7 +1518,7 @@
         
         if (conn.arrowType === 'elbow' || conn.arrowType === 'elbow-dashed') {
           pathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-          pathElement.setAttribute('d', generateElbowPath(from, to, conn.elbowBend, conn.fromAnchor, conn.toAnchor));
+          pathElement.setAttribute('d', generateElbowPath(from, to, conn.elbowBend, conn.fromAnchor, conn.toAnchor, conn.elbowMidRatio));
         } else {
           pathElement = document.createElementNS('http://www.w3.org/2000/svg', 'line');
           pathElement.setAttribute('x1', from.x);
@@ -1527,8 +1576,9 @@
 
         if ((conn.arrowType === 'elbow' || conn.arrowType === 'elbow-dashed') && isSelected) {
           const useH = getElbowBend(from, to, conn.elbowBend, conn.fromAnchor, conn.toAnchor) === 'h';
-          const cornerX = useH ? (from.x + to.x) / 2 : from.x;
-          const cornerY = useH ? from.y : (from.y + to.y) / 2;
+          const ratio = (typeof conn.elbowMidRatio === 'number' && !isNaN(conn.elbowMidRatio)) ? conn.elbowMidRatio : 0.5;
+          const cornerX = useH ? from.x + (to.x - from.x) * ratio : from.x;
+          const cornerY = useH ? from.y : from.y + (to.y - from.y) * ratio;
 
           const handle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
           handle.setAttribute('cx', cornerX);
@@ -1538,8 +1588,12 @@
           handle.setAttribute('stroke', 'white');
           handle.setAttribute('stroke-width', '2');
           handle.classList.add('elbow-handle');
-          handle.style.cursor = 'pointer';
+          handle.style.cursor = useH ? 'ew-resize' : 'ns-resize';
           handle.style.pointerEvents = 'all';
+
+          const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+          title.textContent = "Glisser pour déplacer l'angle, cliquer pour inverser son sens";
+          handle.appendChild(title);
 
           const icon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
           icon.setAttribute('x', cornerX);
@@ -1550,17 +1604,15 @@
           icon.setAttribute('fill', 'white');
           icon.style.pointerEvents = 'none';
           icon.classList.add('elbow-handle-icon');
-          icon.textContent = '⟲';
+          icon.textContent = useH ? '↔' : '↕';
 
-          const toggleBend = (e) => {
+          handle.addEventListener('mousedown', (e) => {
             e.stopPropagation();
-            saveHistory();
-            conn.elbowBend = useH ? 'v' : 'h';
-            renderConnections();
-            autosave();
-          };
-          handle.addEventListener('click', toggleBend);
-          handle.addEventListener('mousedown', (e) => e.stopPropagation());
+            e.preventDefault();
+            elbowDragSnapshot = JSON.stringify({ nodes: state.nodes, connections: state.connections });
+            elbowDragMoved = false;
+            draggingElbow = { conn, useH, from, to };
+          });
 
           connectionsSvg.appendChild(handle);
           connectionsSvg.appendChild(icon);
@@ -1752,6 +1804,7 @@
             const current = getElbowBend(from, to, conn.elbowBend, conn.fromAnchor, conn.toAnchor);
             saveHistory();
             conn.elbowBend = current === 'h' ? 'v' : 'h';
+            conn.elbowMidRatio = 0.5;
             renderConnections();
             autosave();
           });
@@ -1841,7 +1894,8 @@
             { x: to.x + offsetX, y: to.y + offsetY },
             conn.elbowBend,
             conn.fromAnchor,
-            conn.toAnchor
+            conn.toAnchor,
+            conn.elbowMidRatio
           );
           coords = `d="${path}"`;
         }
