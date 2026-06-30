@@ -1105,6 +1105,24 @@
       return Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
     }
 
+    // Supprime les points quasi-identiques consécutifs : un dernier segment de longueur ~0
+    // empêche le navigateur de calculer correctement l'angle de la pointe de flèche (marker orient="auto").
+    function pointsToPath(points) {
+      const EPS = 0.5;
+      const cleaned = [points[0]];
+      for (let i = 1; i < points.length; i++) {
+        const prev = cleaned[cleaned.length - 1];
+        const p = points[i];
+        if (Math.abs(p.x - prev.x) > EPS || Math.abs(p.y - prev.y) > EPS) {
+          cleaned.push(p);
+        }
+      }
+      if (cleaned.length === 1) {
+        return `M ${cleaned[0].x} ${cleaned[0].y}`;
+      }
+      return 'M ' + cleaned.map((p, i) => i === 0 ? `${p.x} ${p.y}` : `L ${p.x} ${p.y}`).join(' ');
+    }
+
     function generateElbowPath(from, to, bend) {
       const dx = to.x - from.x;
       const dy = to.y - from.y;
@@ -1112,11 +1130,11 @@
       const midY = from.y + dy / 2;
       const useH = getElbowBend(from, to, bend) === 'h';
 
-      if (useH) {
-        return `M ${from.x} ${from.y} L ${midX} ${from.y} L ${midX} ${to.y} L ${to.x} ${to.y}`;
-      } else {
-        return `M ${from.x} ${from.y} L ${from.x} ${midY} L ${to.x} ${midY} L ${to.x} ${to.y}`;
-      }
+      const points = useH
+        ? [{x: from.x, y: from.y}, {x: midX, y: from.y}, {x: midX, y: to.y}, {x: to.x, y: to.y}]
+        : [{x: from.x, y: from.y}, {x: from.x, y: midY}, {x: to.x, y: midY}, {x: to.x, y: to.y}];
+
+      return pointsToPath(points);
     }
 
     // --- Gestion globale du déplacement des blocs (un seul jeu de listeners) ---
