@@ -1097,14 +1097,22 @@
     }
 
     // Générer un chemin orthogonal (angle droit)
-    function generateElbowPath(from, to) {
+    // bend: 'h' = horizontal d'abord, 'v' = vertical d'abord, undefined = automatique (comportement historique)
+    function getElbowBend(from, to, bend) {
+      if (bend === 'h' || bend === 'v') return bend;
       const dx = to.x - from.x;
       const dy = to.y - from.y;
-      
+      return Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+    }
+
+    function generateElbowPath(from, to, bend) {
+      const dx = to.x - from.x;
+      const dy = to.y - from.y;
       const midX = from.x + dx / 2;
       const midY = from.y + dy / 2;
-      
-      if (Math.abs(dx) > Math.abs(dy)) {
+      const useH = getElbowBend(from, to, bend) === 'h';
+
+      if (useH) {
         return `M ${from.x} ${from.y} L ${midX} ${from.y} L ${midX} ${to.y} L ${to.x} ${to.y}`;
       } else {
         return `M ${from.x} ${from.y} L ${from.x} ${midY} L ${to.x} ${midY} L ${to.x} ${to.y}`;
@@ -1345,7 +1353,7 @@
     });
 
     function renderConnections() {
-      connectionsSvg.querySelectorAll('.connection-line, .connection-label, .connection-label-bg').forEach(el => el.remove());
+      connectionsSvg.querySelectorAll('.connection-line, .connection-label, .connection-label-bg, .elbow-handle, .elbow-handle-icon').forEach(el => el.remove());
 
       state.connections.forEach(conn => {
         const fromNode = state.nodes.find(n => n.id === conn.from);
@@ -1361,7 +1369,7 @@
         
         if (conn.arrowType === 'elbow' || conn.arrowType === 'elbow-dashed') {
           pathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-          pathElement.setAttribute('d', generateElbowPath(from, to));
+          pathElement.setAttribute('d', generateElbowPath(from, to, conn.elbowBend));
         } else {
           pathElement = document.createElementNS('http://www.w3.org/2000/svg', 'line');
           pathElement.setAttribute('x1', from.x);
@@ -1416,6 +1424,47 @@
         });
 
         connectionsSvg.appendChild(pathElement);
+
+        if ((conn.arrowType === 'elbow' || conn.arrowType === 'elbow-dashed') && isSelected) {
+          const useH = getElbowBend(from, to, conn.elbowBend) === 'h';
+          const cornerX = useH ? (from.x + to.x) / 2 : from.x;
+          const cornerY = useH ? from.y : (from.y + to.y) / 2;
+
+          const handle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+          handle.setAttribute('cx', cornerX);
+          handle.setAttribute('cy', cornerY);
+          handle.setAttribute('r', 8);
+          handle.setAttribute('fill', '#0366d6');
+          handle.setAttribute('stroke', 'white');
+          handle.setAttribute('stroke-width', '2');
+          handle.classList.add('elbow-handle');
+          handle.style.cursor = 'pointer';
+          handle.style.pointerEvents = 'all';
+
+          const icon = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          icon.setAttribute('x', cornerX);
+          icon.setAttribute('y', cornerY);
+          icon.setAttribute('text-anchor', 'middle');
+          icon.setAttribute('dominant-baseline', 'central');
+          icon.setAttribute('font-size', '10');
+          icon.setAttribute('fill', 'white');
+          icon.style.pointerEvents = 'none';
+          icon.classList.add('elbow-handle-icon');
+          icon.textContent = '⟲';
+
+          const toggleBend = (e) => {
+            e.stopPropagation();
+            saveHistory();
+            conn.elbowBend = useH ? 'v' : 'h';
+            renderConnections();
+            autosave();
+          };
+          handle.addEventListener('click', toggleBend);
+          handle.addEventListener('mousedown', (e) => e.stopPropagation());
+
+          connectionsSvg.appendChild(handle);
+          connectionsSvg.appendChild(icon);
+        }
 
         if (conn.label) {
           const midX = (from.x + to.x) / 2;
@@ -1568,6 +1617,13 @@
             </select>
           </div>
 
+          ${(conn.arrowType === 'elbow' || conn.arrowType === 'elbow-dashed') ? `
+          <div class="prop-group">
+            <label>Sens du coude</label>
+            <button class="btn" style="width:100%" id="toggleBendBtn">⟲ Inverser le sens de l'angle</button>
+          </div>
+          ` : ''}
+
           <div class="prop-group">
             <button class="btn btn-clear" style="width:100%" id="deleteConn">🗑 Supprimer (Suppr)</button>
           </div>
@@ -1584,6 +1640,22 @@
           renderConnections();
           autosave();
         });
+
+        const toggleBendBtn = document.getElementById('toggleBendBtn');
+        if (toggleBendBtn) {
+          toggleBendBtn.addEventListener('click', () => {
+            const fromNode = state.nodes.find(n => n.id === conn.from);
+            const toNode = state.nodes.find(n => n.id === conn.to);
+            if (!fromNode || !toNode) return;
+            const from = getAnchorPosition(fromNode, conn.fromAnchor);
+            const to = getAnchorPosition(toNode, conn.toAnchor);
+            const current = getElbowBend(from, to, conn.elbowBend);
+            saveHistory();
+            conn.elbowBend = current === 'h' ? 'v' : 'h';
+            renderConnections();
+            autosave();
+          });
+        }
 
         document.getElementById('deleteConn').addEventListener('click', deleteSelectedConnection);
 
@@ -1666,7 +1738,8 @@
           element = 'path';
           const path = generateElbowPath(
             { x: from.x + offsetX, y: from.y + offsetY },
-            { x: to.x + offsetX, y: to.y + offsetY }
+            { x: to.x + offsetX, y: to.y + offsetY },
+            conn.elbowBend
           );
           coords = `d="${path}"`;
         }
