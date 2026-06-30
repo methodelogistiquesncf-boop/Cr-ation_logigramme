@@ -138,11 +138,20 @@
       background: #28a745;
       color: white;
       border-color: #28a745;
-      margin-left: auto;
     }
 
     .btn-export:hover {
       background: #22863a;
+    }
+
+    .btn-secondary {
+      background: #6f42c1;
+      color: white;
+      border-color: #6f42c1;
+    }
+
+    .btn-secondary:hover {
+      background: #5a32a3;
     }
 
     .btn-clear {
@@ -153,6 +162,17 @@
 
     .btn-clear:hover {
       background: #cb2431;
+    }
+
+    .toolbar-spacer {
+      margin-left: auto;
+    }
+
+    .save-indicator {
+      font-size: 11px;
+      color: #959da5;
+      white-space: nowrap;
+      transition: opacity 0.3s;
     }
 
     .arrow-type-selector {
@@ -241,6 +261,25 @@
       white-space: pre-wrap;
       max-width: 90%;
       line-height: 1.3;
+    }
+
+    .node-text-edit {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 88%;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 500;
+      font-family: inherit;
+      border: 1px dashed #0366d6;
+      background: rgba(255,255,255,0.9);
+      resize: none;
+      outline: none;
+      line-height: 1.3;
+      border-radius: 4px;
+      padding: 2px;
     }
 
     /* Points d'ancrage */
@@ -401,6 +440,23 @@
       color: #959da5;
       font-size: 13px;
       margin-top: 40px;
+    }
+
+    .shortcut-hint {
+      font-size: 11px;
+      color: #959da5;
+      margin-top: 30px;
+      line-height: 1.8;
+      border-top: 1px solid #e1e4e8;
+      padding-top: 15px;
+    }
+
+    .shortcut-hint kbd {
+      background: #f6f8fa;
+      border: 1px solid #e1e4e8;
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-family: monospace;
     }
 
     .arrow-preview {
@@ -650,6 +706,15 @@
           <div style="font-size: 10px; margin-top: 4px;">Épaisse</div>
         </div>
       </div>
+
+      <div class="shortcut-hint">
+        <strong>Raccourcis</strong><br>
+        <kbd>Suppr</kbd> Supprimer la sélection<br>
+        <kbd>Ctrl</kbd>+<kbd>Z</kbd> Annuler<br>
+        <kbd>Ctrl</kbd>+<kbd>D</kbd> Dupliquer le bloc<br>
+        <kbd>Échap</kbd> Quitter mode connexion<br>
+        Double-clic sur un bloc : éditer le texte
+      </div>
     </div>
 
     <!-- Zone centrale -->
@@ -668,6 +733,14 @@
           <button class="arrow-type-btn" data-type="dashed">Pointillé</button>
           <button class="arrow-type-btn" data-type="thick">Épaisse</button>
         </div>
+        <button class="btn" id="snapBtn" title="Aligner les blocs sur la grille">
+          <span>🧲</span>
+          Grille
+        </button>
+        <button class="btn" id="duplicateBtn">
+          <span>📋</span>
+          Dupliquer
+        </button>
         <button class="btn" id="undoBtn">
           <span>↶</span>
           Annuler
@@ -676,9 +749,25 @@
           <span>🗑</span>
           Vider
         </button>
-        <button class="btn btn-export" id="exportBtn">
+
+        <div class="toolbar-spacer"></div>
+        <span class="save-indicator" id="saveIndicator"></span>
+        <input type="file" id="importInput" accept=".json" style="display:none">
+        <button class="btn" id="importBtn">
+          <span>📂</span>
+          Importer
+        </button>
+        <button class="btn btn-secondary" id="saveJsonBtn">
           <span>💾</span>
-          Exporter SVG
+          Sauver projet
+        </button>
+        <button class="btn btn-export" id="exportPngBtn">
+          <span>🖼</span>
+          PNG
+        </button>
+        <button class="btn btn-export" id="exportBtn">
+          <span>📐</span>
+          SVG
         </button>
       </div>
 
@@ -723,8 +812,12 @@
       currentArrowType: 'simple',
       history: [],
       nodeCounter: 0,
-      connectionCounter: 0
+      connectionCounter: 0,
+      snapToGrid: true
     };
+
+    const GRID_SIZE = 20;
+    const STORAGE_KEY = 'logigramme_autosave_v1';
 
     const canvas = document.getElementById('canvas');
     const connectionsSvg = document.getElementById('connectionsSvg');
@@ -734,6 +827,13 @@
     const undoBtn = document.getElementById('undoBtn');
     const clearBtn = document.getElementById('clearBtn');
     const exportBtn = document.getElementById('exportBtn');
+    const exportPngBtn = document.getElementById('exportPngBtn');
+    const saveJsonBtn = document.getElementById('saveJsonBtn');
+    const importBtn = document.getElementById('importBtn');
+    const importInput = document.getElementById('importInput');
+    const duplicateBtn = document.getElementById('duplicateBtn');
+    const snapBtn = document.getElementById('snapBtn');
+    const saveIndicator = document.getElementById('saveIndicator');
 
     const colorPresets = [
       '#0366d6', '#28a745', '#d73a49', '#f59e0b', '#8b5cf6',
@@ -812,6 +912,9 @@
         document.querySelectorAll('.arrow-preview-item').forEach(i => i.classList.remove('selected'));
         item.classList.add('selected');
         state.currentArrowType = item.dataset.arrow;
+        document.querySelectorAll('.arrow-type-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.type === item.dataset.arrow);
+        });
       });
     });
 
@@ -820,8 +923,21 @@
         document.querySelectorAll('.arrow-type-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         state.currentArrowType = btn.dataset.type;
+        document.querySelectorAll('.arrow-preview-item').forEach(i => {
+          i.classList.toggle('selected', i.dataset.arrow === btn.dataset.type);
+        });
       });
     });
+
+    snapBtn.classList.add('active');
+    snapBtn.addEventListener('click', () => {
+      state.snapToGrid = !state.snapToGrid;
+      snapBtn.classList.toggle('active', state.snapToGrid);
+    });
+
+    function snap(value) {
+      return state.snapToGrid ? Math.round(value / GRID_SIZE) * GRID_SIZE : value;
+    }
 
     function saveHistory() {
       state.history.push(JSON.stringify({
@@ -829,6 +945,42 @@
         connections: state.connections
       }));
       if (state.history.length > 50) state.history.shift();
+    }
+
+    let autosaveTimeout = null;
+    function autosave() {
+      clearTimeout(autosaveTimeout);
+      autosaveTimeout = setTimeout(() => {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            nodes: state.nodes,
+            connections: state.connections,
+            nodeCounter: state.nodeCounter,
+            connectionCounter: state.connectionCounter
+          }));
+          if (saveIndicator) {
+            saveIndicator.textContent = '💾 Sauvegardé localement ' + new Date().toLocaleTimeString('fr-FR');
+          }
+        } catch (err) {
+          console.warn('Autosave impossible :', err);
+        }
+      }, 400);
+    }
+
+    function restoreAutosave() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (data.nodes && data.nodes.length > 0) {
+          state.nodes = data.nodes;
+          state.connections = data.connections || [];
+          state.nodeCounter = data.nodeCounter || state.nodes.reduce((m, n) => Math.max(m, n.id), 0);
+          state.connectionCounter = data.connectionCounter || state.connections.reduce((m, c) => Math.max(m, c.id), 0);
+        }
+      } catch (err) {
+        console.warn('Impossible de restaurer la sauvegarde locale :', err);
+      }
     }
 
     undoBtn.addEventListener('click', () => {
@@ -873,8 +1025,8 @@
         const node = {
           id: ++state.nodeCounter,
           type: nodeType,
-          x: e.clientX - rect.left + canvas.scrollLeft - nodeConfig.width/2,
-          y: e.clientY - rect.top + canvas.scrollTop - nodeConfig.height/2,
+          x: snap(e.clientX - rect.left + canvas.scrollLeft - nodeConfig.width/2),
+          y: snap(e.clientY - rect.top + canvas.scrollTop - nodeConfig.height/2),
           text: nodeConfig.label,
           borderColor: nodeConfig.color,
           fillColor: nodeConfig.fill,
@@ -882,7 +1034,7 @@
           height: nodeConfig.height
         };
         state.nodes.push(node);
-        render();
+        selectNode(node);
       }
     });
 
@@ -891,12 +1043,14 @@
       arrowBtn.classList.toggle('active', state.arrowMode);
       arrowTypeSelector.style.display = state.arrowMode ? 'flex' : 'none';
       canvas.classList.toggle('arrow-mode', state.arrowMode);
-      if (!state.arrowMode) {
-        state.arrowStart = null;
-        state.arrowStartAnchor = null;
-        document.querySelectorAll('.node').forEach(n => n.classList.remove('connecting'));
-      }
+      cancelArrowDrawing();
     });
+
+    function cancelArrowDrawing() {
+      state.arrowStart = null;
+      state.arrowStartAnchor = null;
+      document.querySelectorAll('.node').forEach(n => n.classList.remove('connecting'));
+    }
 
     function getAnchorPosition(node, anchor) {
       const positions = {
@@ -914,18 +1068,75 @@
       const dx = to.x - from.x;
       const dy = to.y - from.y;
       
-      // Point intermédiaire (milieu horizontal ou vertical selon la distance)
       const midX = from.x + dx / 2;
       const midY = from.y + dy / 2;
       
-      // Déterminer si on fait horizontal-vertical ou vertical-horizontal
       if (Math.abs(dx) > Math.abs(dy)) {
-        // Horizontal d'abord
         return `M ${from.x} ${from.y} L ${midX} ${from.y} L ${midX} ${to.y} L ${to.x} ${to.y}`;
       } else {
-        // Vertical d'abord
         return `M ${from.x} ${from.y} L ${from.x} ${midY} L ${to.x} ${midY} L ${to.x} ${to.y}`;
       }
+    }
+
+    // --- Gestion globale du déplacement des blocs (un seul jeu de listeners) ---
+    let draggingNode = null;
+    let dragOffsetX = 0, dragOffsetY = 0;
+    let dragMoved = false;
+    let dragSnapshot = null;
+
+    document.addEventListener('mousemove', (e) => {
+      if (!draggingNode) return;
+      dragMoved = true;
+      draggingNode.x = snap(e.clientX - dragOffsetX);
+      draggingNode.y = snap(e.clientY - dragOffsetY);
+      const el = canvas.querySelector(`.node[data-id="${draggingNode.id}"]`);
+      if (el) {
+        el.style.left = draggingNode.x + 'px';
+        el.style.top = draggingNode.y + 'px';
+      }
+      renderConnections();
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (draggingNode) {
+        if (dragMoved && dragSnapshot) {
+          state.history.push(dragSnapshot);
+          if (state.history.length > 50) state.history.shift();
+          autosave();
+        }
+        const el = canvas.querySelector(`.node[data-id="${draggingNode.id}"]`);
+        if (el) el.style.cursor = 'move';
+        draggingNode = null;
+        dragSnapshot = null;
+      }
+    });
+
+    function startInlineEdit(node, div, textSpan) {
+      const textarea = document.createElement('textarea');
+      textarea.className = 'node-text-edit';
+      textarea.value = node.text;
+      textSpan.style.display = 'none';
+      div.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+
+      const finish = () => {
+        node.text = textarea.value;
+        textarea.remove();
+        render();
+      };
+
+      textarea.addEventListener('blur', finish);
+      textarea.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          finish();
+        } else if (e.key === 'Escape') {
+          textarea.value = node.text;
+          finish();
+        }
+      });
     }
 
     function createNodeElement(node) {
@@ -937,19 +1148,16 @@
       div.style.height = node.height + 'px';
       div.dataset.id = node.id;
 
-      // SVG de la forme
       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.setAttribute('width', node.width);
       svg.setAttribute('height', node.height);
       svg.innerHTML = generateShapeSVG(node.type, node.width, node.height, node.borderColor, node.fillColor);
       div.appendChild(svg);
 
-      // Texte
       const textSpan = document.createElement('div');
       textSpan.className = 'node-text';
       textSpan.textContent = node.text;
       
-      // Couleur du texte selon le fond
       if (node.fillColor && node.fillColor !== 'transparent') {
         const rgb = hexToRgb(node.fillColor);
         const brightness = (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000;
@@ -960,7 +1168,6 @@
       
       div.appendChild(textSpan);
 
-      // Points d'ancrage
       const anchorPoints = document.createElement('div');
       anchorPoints.className = 'anchor-points';
       
@@ -988,9 +1195,7 @@
                 label: '',
                 arrowType: state.currentArrowType
               });
-              document.querySelectorAll('.node').forEach(n => n.classList.remove('connecting'));
-              state.arrowStart = null;
-              state.arrowStartAnchor = null;
+              cancelArrowDrawing();
               render();
             }
           }
@@ -1001,7 +1206,6 @@
       
       div.appendChild(anchorPoints);
 
-      // Sélection
       textSpan.addEventListener('click', (e) => {
         e.stopPropagation();
         if (!state.arrowMode) {
@@ -1009,34 +1213,23 @@
         }
       });
 
-      // Déplacement
-      let isDragging = false;
-      let startX, startY;
+      div.addEventListener('dblclick', (e) => {
+        if (state.arrowMode) return;
+        e.stopPropagation();
+        saveHistory();
+        startInlineEdit(node, div, textSpan);
+      });
 
       div.addEventListener('mousedown', (e) => {
         if (state.arrowMode || e.target.classList.contains('anchor-point')) return;
-        isDragging = true;
-        startX = e.clientX - node.x;
-        startY = e.clientY - node.y;
+        dragSnapshot = JSON.stringify({ nodes: state.nodes, connections: state.connections });
+        draggingNode = node;
+        dragMoved = false;
+        dragOffsetX = e.clientX - node.x;
+        dragOffsetY = e.clientY - node.y;
         div.style.cursor = 'grabbing';
         e.preventDefault();
-      });
-
-      document.addEventListener('mousemove', (e) => {
-        if (!isDragging) return;
-        node.x = e.clientX - startX;
-        node.y = e.clientY - startY;
-        div.style.left = node.x + 'px';
-        div.style.top = node.y + 'px';
-        renderConnections();
-      });
-
-      document.addEventListener('mouseup', () => {
-        if (isDragging) {
-          isDragging = false;
-          div.style.cursor = 'move';
-          saveHistory();
-        }
+        if (!state.arrowMode) selectNode(node);
       });
 
       if (state.selectedNode && state.selectedNode.id === node.id) {
@@ -1062,6 +1255,62 @@
       render();
     }
 
+    function deleteSelectedNode() {
+      if (!state.selectedNode) return;
+      saveHistory();
+      const id = state.selectedNode.id;
+      state.nodes = state.nodes.filter(n => n.id !== id);
+      state.connections = state.connections.filter(c => c.from !== id && c.to !== id);
+      state.selectedNode = null;
+      render();
+      autosave();
+    }
+
+    function deleteSelectedConnection() {
+      if (!state.selectedConnection) return;
+      saveHistory();
+      state.connections = state.connections.filter(c => c.id !== state.selectedConnection.id);
+      state.selectedConnection = null;
+      render();
+      autosave();
+    }
+
+    function duplicateNode(node) {
+      saveHistory();
+      const newNode = Object.assign({}, node, {
+        id: ++state.nodeCounter,
+        x: node.x + GRID_SIZE * 2,
+        y: node.y + GRID_SIZE * 2
+      });
+      state.nodes.push(newNode);
+      selectNode(newNode);
+      autosave();
+    }
+
+    duplicateBtn.addEventListener('click', () => {
+      if (state.selectedNode) duplicateNode(state.selectedNode);
+    });
+
+    document.addEventListener('keydown', (e) => {
+      const tag = document.activeElement && document.activeElement.tagName;
+      const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+      if (isTyping) return;
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        if (state.selectedNode) deleteSelectedNode();
+        else if (state.selectedConnection) deleteSelectedConnection();
+      } else if (e.key === 'Escape') {
+        if (state.arrowMode) arrowBtn.click();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        undoBtn.click();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        if (state.selectedNode) duplicateNode(state.selectedNode);
+      }
+    });
+
     function renderConnections() {
       connectionsSvg.querySelectorAll('.connection-line, .connection-label, .connection-label-bg').forEach(el => el.remove());
 
@@ -1077,13 +1326,10 @@
 
         let pathElement;
         
-        // Créer la ligne ou le chemin selon le type
         if (conn.arrowType === 'elbow' || conn.arrowType === 'elbow-dashed') {
-          // Chemin orthogonal
           pathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path');
           pathElement.setAttribute('d', generateElbowPath(from, to));
         } else {
-          // Ligne droite
           pathElement = document.createElementNS('http://www.w3.org/2000/svg', 'line');
           pathElement.setAttribute('x1', from.x);
           pathElement.setAttribute('y1', from.y);
@@ -1097,7 +1343,6 @@
           pathElement.classList.add('selected');
         }
 
-        // Appliquer le style selon le type de connexion
         switch (conn.arrowType) {
           case 'simple':
             pathElement.setAttribute('stroke-width', '2');
@@ -1139,7 +1384,6 @@
 
         connectionsSvg.appendChild(pathElement);
 
-        // Label au milieu
         if (conn.label) {
           const midX = (from.x + to.x) / 2;
           const midY = (from.y + to.y) / 2;
@@ -1217,24 +1461,28 @@
           </div>
 
           <div class="prop-group">
-            <button class="btn btn-clear" style="width:100%" id="deleteNode">🗑 Supprimer le bloc</button>
+            <button class="btn" style="width:100%; margin-bottom: 8px;" id="duplicateNodeBtn">📋 Dupliquer (Ctrl+D)</button>
+            <button class="btn btn-clear" style="width:100%" id="deleteNode">🗑 Supprimer le bloc (Suppr)</button>
           </div>
         `;
 
         document.getElementById('nodeText').addEventListener('input', (e) => {
           node.text = e.target.value;
           render();
+          autosave();
         });
 
         document.getElementById('nodeBorderColor').addEventListener('input', (e) => {
           node.borderColor = e.target.value;
           render();
+          autosave();
         });
 
         document.getElementById('nodeFillColor').addEventListener('input', (e) => {
           if (!document.getElementById('nodeTransparent').checked) {
             node.fillColor = e.target.value;
             render();
+            autosave();
           }
         });
 
@@ -1245,6 +1493,7 @@
             node.fillColor = document.getElementById('nodeFillColor').value;
           }
           render();
+          autosave();
         });
 
         document.querySelectorAll('.color-preset').forEach(preset => {
@@ -1256,16 +1505,12 @@
             }
             document.getElementById('nodeBorderColor').value = preset.dataset.color;
             render();
+            autosave();
           });
         });
 
-        document.getElementById('deleteNode').addEventListener('click', () => {
-          saveHistory();
-          state.nodes = state.nodes.filter(n => n.id !== node.id);
-          state.connections = state.connections.filter(c => c.from !== node.id && c.to !== node.id);
-          state.selectedNode = null;
-          render();
-        });
+        document.getElementById('duplicateNodeBtn').addEventListener('click', () => duplicateNode(node));
+        document.getElementById('deleteNode').addEventListener('click', deleteSelectedNode);
 
       } else if (state.selectedConnection) {
         const conn = state.selectedConnection;
@@ -1291,26 +1536,23 @@
           </div>
 
           <div class="prop-group">
-            <button class="btn btn-clear" style="width:100%" id="deleteConn">🗑 Supprimer</button>
+            <button class="btn btn-clear" style="width:100%" id="deleteConn">🗑 Supprimer (Suppr)</button>
           </div>
         `;
 
         document.getElementById('connLabel').addEventListener('input', (e) => {
           conn.label = e.target.value;
           renderConnections();
+          autosave();
         });
 
         document.getElementById('connArrowType').addEventListener('change', (e) => {
           conn.arrowType = e.target.value;
           renderConnections();
+          autosave();
         });
 
-        document.getElementById('deleteConn').addEventListener('click', () => {
-          saveHistory();
-          state.connections = state.connections.filter(c => c.id !== conn.id);
-          state.selectedConnection = null;
-          render();
-        });
+        document.getElementById('deleteConn').addEventListener('click', deleteSelectedConnection);
 
       } else {
         properties.innerHTML = `
@@ -1330,6 +1572,7 @@
       if (state.selectedNode || state.selectedConnection) {
         renderProperties();
       }
+      autosave();
     }
 
     canvas.addEventListener('click', (e) => {
@@ -1341,7 +1584,8 @@
       }
     });
 
-    exportBtn.addEventListener('click', () => {
+    // --- Construction du SVG exportable (réutilisé pour SVG et PNG) ---
+    function buildExportSVG() {
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
       
       state.nodes.forEach(node => {
@@ -1351,6 +1595,10 @@
         maxY = Math.max(maxY, node.y + node.height);
       });
 
+      if (!isFinite(minX)) {
+        minX = 0; minY = 0; maxX = 400; maxY = 300;
+      }
+
       const padding = 40;
       const width = maxX - minX + padding * 2;
       const height = maxY - minY + padding * 2;
@@ -1358,7 +1606,8 @@
       const offsetY = -minY + padding;
 
       let svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+  <rect width="${width}" height="${height}" fill="white"/>
   <defs>
     <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
       <polygon points="0 0, 10 3, 0 6" fill="#586069"/>
@@ -1368,7 +1617,6 @@
     </marker>
   </defs>\n`;
 
-      // Connexions
       state.connections.forEach(conn => {
         const fromNode = state.nodes.find(n => n.id === conn.from);
         const toNode = state.nodes.find(n => n.id === conn.to);
@@ -1407,11 +1655,10 @@
           const midY = (from.y + to.y) / 2 + offsetY;
           const tw = conn.label.length * 7 + 10;
           svg += `  <rect x="${midX - tw/2}" y="${midY - 16}" width="${tw}" height="20" rx="4" fill="white" stroke="#e1e4e8"/>\n`;
-          svg += `  <text x="${midX}" y="${midY}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="600" fill="#586069">${conn.label}</text>\n`;
+          svg += `  <text x="${midX}" y="${midY}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="600" fill="#586069">${escapeXml(conn.label)}</text>\n`;
         }
       });
 
-      // Nœuds
       state.nodes.forEach(node => {
         const x = node.x + offsetX;
         const y = node.y + offsetY;
@@ -1422,13 +1669,28 @@
         const textColor = node.fillColor !== 'transparent' ? 
           ((hexToRgb(node.fillColor).r * 299 + hexToRgb(node.fillColor).g * 587 + hexToRgb(node.fillColor).b * 114) / 1000 > 128 ? '#24292e' : 'white') : 
           node.borderColor;
-        
-        svg += `    <text x="${node.width/2}" y="${node.height/2}" text-anchor="middle" dominant-baseline="middle" font-size="13" font-weight="500" fill="${textColor}">${node.text}</text>\n`;
+
+        const lines = String(node.text).split('\n');
+        const lineHeight = 16;
+        const startY = node.height / 2 - ((lines.length - 1) * lineHeight) / 2;
+        lines.forEach((line, i) => {
+          svg += `    <text x="${node.width/2}" y="${startY + i * lineHeight}" text-anchor="middle" dominant-baseline="middle" font-size="13" font-weight="500" fill="${textColor}">${escapeXml(line)}</text>\n`;
+        });
         svg += `  </g>\n`;
       });
 
       svg += `</svg>`;
+      return { svg, width, height };
+    }
 
+    function escapeXml(str) {
+      return String(str).replace(/[<>&'"]/g, (c) => ({
+        '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;'
+      })[c]);
+    }
+
+    exportBtn.addEventListener('click', () => {
+      const { svg } = buildExportSVG();
       const blob = new Blob([svg], { type: 'image/svg+xml' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1438,6 +1700,86 @@
       URL.revokeObjectURL(url);
     });
 
+    exportPngBtn.addEventListener('click', () => {
+      if (state.nodes.length === 0) {
+        alert('Ajoutez au moins un bloc avant d\\'exporter.');
+        return;
+      }
+      const { svg, width, height } = buildExportSVG();
+      const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        const scale = 2;
+        const c = document.createElement('canvas');
+        c.width = width * scale;
+        c.height = height * scale;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.scale(scale, scale);
+        ctx.drawImage(img, 0, 0, width, height);
+        URL.revokeObjectURL(url);
+        c.toBlob((blob2) => {
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob2);
+          link.download = 'logigramme.png';
+          link.click();
+        });
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        alert('Erreur lors de la génération du PNG.');
+      };
+      img.src = url;
+    });
+
+    saveJsonBtn.addEventListener('click', () => {
+      const data = {
+        nodes: state.nodes,
+        connections: state.connections,
+        nodeCounter: state.nodeCounter,
+        connectionCounter: state.connectionCounter
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'logigramme-projet.json';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    importBtn.addEventListener('click', () => importInput.click());
+
+    importInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const data = JSON.parse(evt.target.result);
+          if (!Array.isArray(data.nodes) || !Array.isArray(data.connections)) {
+            throw new Error('Format invalide');
+          }
+          saveHistory();
+          state.nodes = data.nodes;
+          state.connections = data.connections;
+          state.nodeCounter = data.nodeCounter || state.nodes.reduce((m, n) => Math.max(m, n.id), 0);
+          state.connectionCounter = data.connectionCounter || state.connections.reduce((m, c) => Math.max(m, c.id), 0);
+          state.selectedNode = null;
+          state.selectedConnection = null;
+          render();
+        } catch (err) {
+          alert('Fichier JSON invalide : ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+      importInput.value = '';
+    });
+
+    // Initialisation
+    restoreAutosave();
     render();
   </script>
 </body>
