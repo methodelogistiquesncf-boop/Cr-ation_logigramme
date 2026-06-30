@@ -245,6 +245,11 @@
       z-index: 11;
     }
 
+    .node.drop-target {
+      filter: drop-shadow(0 0 10px rgba(40, 167, 69, 0.9));
+      z-index: 12;
+    }
+
     .node svg {
       display: block;
     }
@@ -713,7 +718,8 @@
         <kbd>Ctrl</kbd>+<kbd>Z</kbd> Annuler<br>
         <kbd>Ctrl</kbd>+<kbd>D</kbd> Dupliquer le bloc<br>
         <kbd>Échap</kbd> Quitter mode connexion<br>
-        Double-clic sur un bloc : éditer le texte
+        Double-clic sur un bloc : éditer le texte<br>
+        Mode connexion : cliquez-glissez d'un point d'ancrage vers un autre bloc
       </div>
     </div>
 
@@ -807,8 +813,6 @@
       selectedNode: null,
       selectedConnection: null,
       arrowMode: false,
-      arrowStart: null,
-      arrowStartAnchor: null,
       currentArrowType: 'simple',
       history: [],
       nodeCounter: 0,
@@ -1079,11 +1083,84 @@
       cancelArrowDrawing();
     });
 
+    // --- Création de connexion par glisser-déposer (cliquer sur un point d'ancrage et glisser vers un autre bloc) ---
+    let connectingFrom = null;
+    let tempConnectionLine = null;
+
     function cancelArrowDrawing() {
-      state.arrowStart = null;
-      state.arrowStartAnchor = null;
-      document.querySelectorAll('.node').forEach(n => n.classList.remove('connecting'));
+      connectingFrom = null;
+      if (tempConnectionLine) {
+        tempConnectionLine.remove();
+        tempConnectionLine = null;
+      }
+      document.querySelectorAll('.node').forEach(n => n.classList.remove('connecting', 'drop-target'));
     }
+
+    function startConnectionDrag(node, anchor) {
+      cancelArrowDrawing();
+      connectingFrom = { node, anchor };
+      const div = canvas.querySelector(`.node[data-id="${node.id}"]`);
+      if (div) div.classList.add('connecting');
+
+      tempConnectionLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      tempConnectionLine.setAttribute('stroke', '#28a745');
+      tempConnectionLine.setAttribute('stroke-width', '2');
+      tempConnectionLine.setAttribute('stroke-dasharray', '6,4');
+      tempConnectionLine.style.pointerEvents = 'none';
+      const start = getAnchorPosition(node, anchor);
+      tempConnectionLine.setAttribute('x1', start.x);
+      tempConnectionLine.setAttribute('y1', start.y);
+      tempConnectionLine.setAttribute('x2', start.x);
+      tempConnectionLine.setAttribute('y2', start.y);
+      connectionsSvg.appendChild(tempConnectionLine);
+    }
+
+    document.addEventListener('mousemove', (e) => {
+      if (!connectingFrom) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left + canvas.scrollLeft;
+      const y = e.clientY - rect.top + canvas.scrollTop;
+      if (tempConnectionLine) {
+        tempConnectionLine.setAttribute('x2', x);
+        tempConnectionLine.setAttribute('y2', y);
+      }
+
+      const hoveredEl = document.elementFromPoint(e.clientX, e.clientY);
+      const hoveredNodeDiv = hoveredEl ? hoveredEl.closest('.node') : null;
+      document.querySelectorAll('.node').forEach(n => n.classList.remove('drop-target'));
+      if (hoveredNodeDiv && parseInt(hoveredNodeDiv.dataset.id) !== connectingFrom.node.id) {
+        hoveredNodeDiv.classList.add('drop-target');
+      }
+    });
+
+    document.addEventListener('mouseup', (e) => {
+      if (!connectingFrom) return;
+
+      const hoveredEl = document.elementFromPoint(e.clientX, e.clientY);
+      const targetAnchorPoint = hoveredEl && hoveredEl.classList.contains('anchor-point') ? hoveredEl : null;
+      const targetNodeDiv = hoveredEl ? hoveredEl.closest('.node') : null;
+
+      if (targetNodeDiv && parseInt(targetNodeDiv.dataset.id) !== connectingFrom.node.id) {
+        const targetNode = state.nodes.find(n => n.id === parseInt(targetNodeDiv.dataset.id));
+        const targetAnchor = targetAnchorPoint ? targetAnchorPoint.dataset.anchor : 'center';
+        if (targetNode) {
+          saveHistory();
+          state.connections.push({
+            id: ++state.connectionCounter,
+            from: connectingFrom.node.id,
+            fromAnchor: connectingFrom.anchor,
+            to: targetNode.id,
+            toAnchor: targetAnchor,
+            label: '',
+            arrowType: state.currentArrowType
+          });
+          autosave();
+        }
+      }
+
+      cancelArrowDrawing();
+      render();
+    });
 
     function getAnchorPosition(node, anchor) {
       const positions = {
@@ -1235,28 +1312,11 @@
         point.className = `anchor-point ${anchor}`;
         point.dataset.anchor = anchor;
         
-        point.addEventListener('click', (e) => {
+        point.addEventListener('mousedown', (e) => {
           e.stopPropagation();
-          
+          e.preventDefault();
           if (state.arrowMode) {
-            if (!state.arrowStart) {
-              state.arrowStart = node;
-              state.arrowStartAnchor = anchor;
-              div.classList.add('connecting');
-            } else if (state.arrowStart.id !== node.id) {
-              saveHistory();
-              state.connections.push({
-                id: ++state.connectionCounter,
-                from: state.arrowStart.id,
-                fromAnchor: state.arrowStartAnchor,
-                to: node.id,
-                toAnchor: anchor,
-                label: '',
-                arrowType: state.currentArrowType
-              });
-              cancelArrowDrawing();
-              render();
-            }
+            startConnectionDrag(node, anchor);
           }
         });
         
@@ -1360,7 +1420,8 @@
         if (state.selectedNode) deleteSelectedNode();
         else if (state.selectedConnection) deleteSelectedConnection();
       } else if (e.key === 'Escape') {
-        if (state.arrowMode) arrowBtn.click();
+        if (connectingFrom) cancelArrowDrawing();
+        else if (state.arrowMode) arrowBtn.click();
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault();
         undoBtn.click();
