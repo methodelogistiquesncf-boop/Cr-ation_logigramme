@@ -50,6 +50,13 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.shape-item * {
+  -webkit-user-drag: none;
+  pointer-events: none;
 }
 
 .shape-item:hover {
