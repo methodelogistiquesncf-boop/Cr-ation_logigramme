@@ -30,6 +30,14 @@ function toCanvasCoords(e) {
 // --- Glisser-déposer d'une forme depuis la barre d'outils vers le canvas ---
 function setupShapeDragAndDrop(shapeItems) {
   shapeItems.forEach(item => {
+    // Le navigateur peut initier son propre glisser-déposer natif sur les
+    // <svg> (surtout Firefox/Safari), ce qui coupe court à notre système
+    // souris maison. On le désactive explicitement sur l'item et tous ses
+    // enfants.
+    item.setAttribute('draggable', 'false');
+    item.querySelectorAll('*').forEach(el => el.setAttribute('draggable', 'false'));
+    item.addEventListener('dragstart', (e) => e.preventDefault());
+
     item.addEventListener('mousedown', (e) => {
       e.preventDefault();
       const nodeType = item.dataset.type;
