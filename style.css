@@ -1,0 +1,477 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow: hidden;
+  background: #f5f7fa;
+}
+
+::view-transition-group(*),
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation-duration: 0.25s;
+  animation-timing-function: cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+.container {
+  display: flex;
+  height: 100vh;
+}
+
+/* Barre d'outils gauche */
+.toolbar {
+  width: 240px;
+  background: white;
+  border-right: 1px solid #e1e4e8;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.toolbar h3 {
+  font-size: 14px;
+  color: #586069;
+  margin-bottom: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.shape-item {
+  padding: 12px;
+  margin-bottom: 10px;
+  border: 2px solid #e1e4e8;
+  border-radius: 8px;
+  cursor: grab;
+  transition: all 0.2s;
+  background: white;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.shape-item:hover {
+  border-color: #0366d6;
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px rgba(3, 102, 214, 0.1);
+}
+
+.shape-item:active {
+  cursor: grabbing;
+}
+
+.shape-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.shape-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #24292e;
+  line-height: 1.3;
+}
+
+.divider {
+  height: 1px;
+  background: #e1e4e8;
+  margin: 20px 0;
+}
+
+/* Canvas central */
+.canvas-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.top-toolbar {
+  background: white;
+  border-bottom: 1px solid #e1e4e8;
+  padding: 12px 20px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.btn {
+  padding: 8px 16px;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn:hover {
+  background: #f6f8fa;
+  border-color: #0366d6;
+}
+
+.btn.active {
+  background: #0366d6;
+  color: white;
+  border-color: #0366d6;
+}
+
+.btn-export {
+  background: #28a745;
+  color: white;
+  border-color: #28a745;
+}
+
+.btn-export:hover {
+  background: #22863a;
+}
+
+.btn-secondary {
+  background: #6f42c1;
+  color: white;
+  border-color: #6f42c1;
+}
+
+.btn-secondary:hover {
+  background: #5a32a3;
+}
+
+.btn-clear {
+  background: #d73a49;
+  color: white;
+  border-color: #d73a49;
+}
+
+.btn-clear:hover {
+  background: #cb2431;
+}
+
+.toolbar-spacer {
+  margin-left: auto;
+}
+
+.save-indicator {
+  font-size: 11px;
+  color: #959da5;
+  white-space: nowrap;
+  transition: opacity 0.3s;
+}
+
+#canvas {
+  flex: 1;
+  position: relative;
+  background:
+    linear-gradient(90deg, #e1e4e8 1px, transparent 1px),
+    linear-gradient(#e1e4e8 1px, transparent 1px);
+  background-size: 20px 20px;
+  overflow: auto;
+  cursor: default;
+}
+
+/* Blocs sur le canvas */
+.node {
+  position: absolute;
+  cursor: move;
+  user-select: none;
+  transition: filter 0.2s;
+}
+
+.node:hover {
+  filter: drop-shadow(0 4px 12px rgba(3, 102, 214, 0.3));
+  z-index: 10;
+}
+
+.node.selected {
+  filter: drop-shadow(0 0 8px rgba(3, 102, 214, 0.6));
+  z-index: 11;
+}
+
+.node.connecting {
+  filter: drop-shadow(0 0 8px rgba(40, 167, 69, 0.6));
+  z-index: 11;
+}
+
+.node.drop-target {
+  filter: drop-shadow(0 0 10px rgba(40, 167, 69, 0.9));
+  z-index: 12;
+}
+
+.node svg {
+  display: block;
+}
+
+.node-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  pointer-events: none;
+  white-space: pre-wrap;
+  max-width: 90%;
+  line-height: 1.3;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+.node-text-edit {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 88%;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  border: 1px dashed #0366d6;
+  background: rgba(255,255,255,0.9);
+  resize: none;
+  outline: none;
+  line-height: 1.3;
+  border-radius: 4px;
+  padding: 2px;
+}
+
+/* Points d'ancrage */
+.anchor-points {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.anchor-point {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: #28a745;
+  border: 2px solid white;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  transition: opacity 0.2s;
+  cursor: crosshair;
+  pointer-events: auto;
+  z-index: 100;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.anchor-point:hover {
+  background: #22863a;
+  transform: translate(-50%, -50%) scale(1.3);
+}
+
+.node:hover .anchor-point,
+.node.connecting .anchor-point {
+  opacity: 1;
+}
+
+.anchor-point.top { left: 50%; top: 0%; }
+.anchor-point.right { left: 100%; top: 50%; }
+.anchor-point.bottom { left: 50%; top: 100%; }
+.anchor-point.left { left: 0%; top: 50%; }
+.anchor-point.top-left { left: 0%; top: 0%; }
+.anchor-point.top-right { left: 100%; top: 0%; }
+.anchor-point.bottom-left { left: 0%; top: 100%; }
+.anchor-point.bottom-right { left: 100%; top: 100%; }
+
+/* Port sur lequel une connexion en cours de glissement va s'accrocher */
+.anchor-point.snap-active {
+  opacity: 1 !important;
+  background: #0366d6;
+  transform: translate(-50%, -50%) scale(1.6);
+  box-shadow: 0 0 0 4px rgba(3, 102, 214, 0.25);
+}
+
+/* Connexions */
+svg.connections {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.connection-line {
+  stroke: #586069;
+  stroke-width: 2;
+  fill: none;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+.connection-line:hover {
+  stroke: #0366d6;
+  stroke-width: 3;
+}
+
+.connection-line.selected {
+  stroke: #0366d6;
+  stroke-width: 3;
+}
+
+.connection-label {
+  font-size: 12px;
+  fill: #586069;
+  pointer-events: none;
+  font-weight: 600;
+}
+
+.endpoint-handle:hover {
+  stroke-width: 3;
+}
+
+.connection-label-bg {
+  fill: white;
+  stroke: #e1e4e8;
+  stroke-width: 1;
+}
+
+/* Propriétés */
+.properties {
+  width: 300px;
+  background: white;
+  border-left: 1px solid #e1e4e8;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.properties h3 {
+  font-size: 16px;
+  margin-bottom: 20px;
+  color: #24292e;
+}
+
+.prop-group {
+  margin-bottom: 20px;
+}
+
+.prop-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  color: #586069;
+}
+
+.prop-group input[type="text"],
+.prop-group textarea,
+.prop-group select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.prop-group textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.prop-group input[type="color"] {
+  width: 100%;
+  height: 40px;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.color-presets {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.color-preset {
+  width: 100%;
+  height: 32px;
+  border: 2px solid #e1e4e8;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.color-preset:hover {
+  transform: scale(1.1);
+  border-color: #0366d6;
+}
+
+.empty-state {
+  text-align: center;
+  color: #959da5;
+  font-size: 13px;
+  margin-top: 40px;
+}
+
+.shortcut-hint {
+  font-size: 11px;
+  color: #959da5;
+  margin-top: 30px;
+  line-height: 1.8;
+  border-top: 1px solid #e1e4e8;
+  padding-top: 15px;
+}
+
+.shortcut-hint kbd {
+  background: #f6f8fa;
+  border: 1px solid #e1e4e8;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-family: monospace;
+}
+
+.arrow-preview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.arrow-preview-item {
+  text-align: center;
+  padding: 8px;
+  border: 2px solid #e1e4e8;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.arrow-preview-item:hover {
+  border-color: #0366d6;
+}
+
+.arrow-preview-item.selected {
+  border-color: #0366d6;
+  background: #f1f8ff;
+}
+
+.arrow-preview svg {
+  display: block;
+  margin: 0 auto;
+}
+
+.color-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
