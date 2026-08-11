@@ -119,15 +119,11 @@ input, textarea, select { font-family: inherit; color: inherit; }
 .anchor-point:hover, .node:hover .anchor-point, .node.selected .anchor-point { opacity: 1; transform: translate(-50%, -50%) scale(1.3); }
 .anchor-point.snap-active { opacity: 1 !important; background: var(--accent); transform: translate(-50%, -50%) scale(1.8); box-shadow: 0 0 0 4px rgba(3,102,214,0.3); }
 
-/* Ports sur les 4 côtés (plus intuitif) */
 .anchor-point.top    { left: 50%; top: 0; }
 .anchor-point.right  { left: 100%; top: 50%; }
 .anchor-point.bottom { left: 50%; top: 100%; }
 .anchor-point.left   { left: 0; top: 50%; }
 
-/* ============================================================
-   CONNEXIONS - NOUVEAU SYSTÈME
-   ============================================================ */
 .connection-path {
   fill: none;
   stroke: var(--text-secondary);
@@ -165,11 +161,8 @@ input, textarea, select { font-family: inherit; color: inherit; }
 .temp-connection-line { stroke: var(--success); stroke-width: 2; stroke-dasharray: 6 4; pointer-events: none; fill: none; }
 .temp-connection-preview { stroke: var(--success); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; fill: none; opacity: 0.6; }
 
-/* Port preview quand on survole un bloc */
 .port-preview { position: absolute; pointer-events: none; z-index: 40; }
 .port-preview-dot { width: 12px; height: 12px; background: var(--success); border: 2px solid white; border-radius: 50%; transform: translate(-50%, -50%); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-
-/* ============================================================ */
 
 .properties { background: var(--bg-secondary); overflow-y: auto; padding: 20px; border-left: 1px solid var(--border-color); }
 .properties h3 { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border-color); }
@@ -318,6 +311,7 @@ input, textarea, select { font-family: inherit; color: inherit; }
       <kbd>Shift</kbd>+<kbd>←↑→↓</kbd> (10px)<br>
       <kbd>Espace</kbd>+glisser : Pan<br>
       <kbd>Molette</kbd> : Zoom<br>
+      <kbd>Échap</kbd> : Annuler sélection/interaction<br>
       Double-clic : éditer texte
     </div>
   </div>
@@ -326,7 +320,6 @@ input, textarea, select { font-family: inherit; color: inherit; }
     <div class="canvas-viewport" id="canvasViewport">
       <svg class="connections-svg" id="connectionsSvg" xmlns="http://www.w3.org/2000/svg">
         <defs>
-          <!-- Marqueurs pour chaque style -->
           <marker id="marker-arrow" viewBox="0 0 12 12" refX="10" refY="6" markerWidth="10" markerHeight="10" orient="auto-start-reverse" markerUnits="userSpaceOnUse">
             <path d="M 1 1 L 10 6 L 1 11 Z" fill="context-stroke"/>
           </marker>
@@ -384,13 +377,12 @@ const MAX_ZOOM = 4;
 const STORAGE_KEY = 'logigramme_pro_v3';
 const HISTORY_MAX = 100;
 
-// Configuration du routage - NOUVEAU SYSTÈME
 const ROUTING = {
-  CORNER_RADIUS: 12,       // Rayon des arrondis pour orthogonal
-  MARGIN: 20,              // Marge autour des blocs pour le routage
-  SNAP_RADIUS: 25,         // Rayon de snap aux ports (en pixels canvas)
-  MIN_SEGMENT: 10,         // Longueur minimale d'un segment (évite les artefacts)
-  CURVE_TENSION: 0.5,      // Tension des courbes Bézier
+  CORNER_RADIUS: 12,
+  MARGIN: 20,
+  SNAP_RADIUS: 25,
+  MIN_SEGMENT: 10,
+  CURVE_TENSION: 0.5,
 };
 
 const COLOR_PRESETS = ['#0366d6', '#28a745', '#d73a49', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#6366f1', '#10b981', '#f97316'];
@@ -408,7 +400,6 @@ const NODE_TYPES = {
   preparation: { label: 'Préparation',    color: '#ec4899', width: 140, height: 60 },
 };
 
-// 4 ports principaux (plus intuitifs que 8)
 const PORTS = ['top', 'right', 'bottom', 'left'];
 
 /* ============================================================
@@ -424,21 +415,10 @@ const zoomDisplay = $('zoomDisplay');
 const toastEl = $('toast');
 
 /* ============================================================
-   🆕 MODULE ROUTING : Nouvelle méthodologie complète des flèches
-   ============================================================
-   Ce module gère toute la logique intelligente des connexions :
-   1. Détermine automatiquement les meilleurs ports de sortie/entrée
-   2. Calcule un chemin qui évite les autres blocs
-   3. Génère un path SVG propre avec arrondis ou courbes
+   MODULE ROUTING
    ============================================================ */
 const Routing = (() => {
 
-  /**
-   * Récupère la position d'un port spécifique sur un nœud
-   * @param {Object} node - Le nœud
-   * @param {string} port - 'top', 'right', 'bottom', 'left'
-   * @returns {{x, y}} Coordonnées absolues
-   */
   function getPortPosition(node, port) {
     const cx = node.x + node.width / 2;
     const cy = node.y + node.height / 2;
@@ -451,10 +431,6 @@ const Routing = (() => {
     }
   }
 
-  /**
-   * Retourne la direction vectorielle sortante d'un port
-   * Sert à prolonger la ligne au-delà du bloc pour le routage
-   */
   function getPortDirection(port) {
     switch (port) {
       case 'top':    return { x: 0, y: -1 };
@@ -465,24 +441,15 @@ const Routing = (() => {
     }
   }
 
-  /**
-   * Détermine le quadrant de la cible par rapport à la source
-   * Utilisé pour choisir intelligemment les ports
-   * Retourne : { horizontal: 'left'|'right', vertical: 'top'|'bottom', dominant: 'h'|'v' }
-   */
   function analyzeRelativePosition(fromNode, toNode) {
     const fcx = fromNode.x + fromNode.width / 2;
     const fcy = fromNode.y + fromNode.height / 2;
     const tcx = toNode.x + toNode.width / 2;
     const tcy = toNode.y + toNode.height / 2;
-
     const dx = tcx - fcx;
     const dy = tcy - fcy;
-
-    // Distance effective entre les bords des deux blocs
     const gapX = Math.max(0, Math.abs(dx) - (fromNode.width + toNode.width) / 2);
     const gapY = Math.max(0, Math.abs(dy) - (fromNode.height + toNode.height) / 2);
-
     return {
       horizontal: dx >= 0 ? 'right' : 'left',
       vertical: dy >= 0 ? 'bottom' : 'top',
@@ -491,254 +458,121 @@ const Routing = (() => {
     };
   }
 
-  /**
-   * NOUVEAU : Choisit intelligemment les meilleurs ports de sortie et d'entrée
-   * Algorithme : on favorise le port aligné avec la direction dominante,
-   * et on évite les ports qui créeraient un angle rentrant dans le bloc.
-   */
   function chooseSmartPorts(fromNode, toNode) {
     const rel = analyzeRelativePosition(fromNode, toNode);
-
     let fromPort, toPort;
-
     if (rel.dominant === 'h') {
-      // Déplacement principalement horizontal
-      fromPort = rel.horizontal; // right ou left
+      fromPort = rel.horizontal;
       toPort = rel.horizontal === 'right' ? 'left' : 'right';
-
-      // Si les blocs se chevauchent verticalement, on utilise les ports horizontaux
-      // Sinon, on pourrait ajuster selon l'alignement
       const overlapY = !(fromNode.y + fromNode.height < toNode.y || toNode.y + toNode.height < fromNode.y);
-
       if (!overlapY && Math.abs(rel.dy) > fromNode.height * 1.5) {
-        // Grand décalage vertical : préférer les ports top/bottom si plus naturels
-        if (rel.vertical === 'bottom') {
-          fromPort = 'bottom';
-          toPort = 'top';
-        } else {
-          fromPort = 'top';
-          toPort = 'bottom';
-        }
+        if (rel.vertical === 'bottom') { fromPort = 'bottom'; toPort = 'top'; }
+        else { fromPort = 'top'; toPort = 'bottom'; }
       }
     } else {
-      // Déplacement principalement vertical
-      fromPort = rel.vertical; // top ou bottom
+      fromPort = rel.vertical;
       toPort = rel.vertical === 'bottom' ? 'top' : 'bottom';
-
       const overlapX = !(fromNode.x + fromNode.width < toNode.x || toNode.x + toNode.width < fromNode.x);
-
       if (!overlapX && Math.abs(rel.dx) > fromNode.width * 1.5) {
-        if (rel.horizontal === 'right') {
-          fromPort = 'right';
-          toPort = 'left';
-        } else {
-          fromPort = 'left';
-          toPort = 'right';
-        }
+        if (rel.horizontal === 'right') { fromPort = 'right'; toPort = 'left'; }
+        else { fromPort = 'left'; toPort = 'right'; }
       }
     }
-
     return { fromPort, toPort };
   }
 
-  /**
-   * Retourne le rectangle étendu (avec marge) d'un nœud, utilisé pour l'évitement
-   */
   function getExpandedBounds(node, margin = ROUTING.MARGIN) {
     return {
-      left: node.x - margin,
-      right: node.x + node.width + margin,
-      top: node.y - margin,
-      bottom: node.y + node.height + margin,
+      left: node.x - margin, right: node.x + node.width + margin,
+      top: node.y - margin, bottom: node.y + node.height + margin,
     };
   }
 
-  /**
-   * Vérifie si un point est à l'intérieur d'un rectangle (étendu)
-   */
   function isPointInRect(x, y, rect) {
     return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
   }
 
-  /**
-   * NOUVEAU ALGORITHME : Routage orthogonal (Manhattan) avec évitement
-   * Génère une liste de points formant un chemin en L, Z ou escalier
-   * qui contourne les obstacles.
-   */
   function routeOrthogonal(fromNode, fromPort, toNode, toPort, allNodes) {
     const start = getPortPosition(fromNode, fromPort);
     const end = getPortPosition(toNode, toPort);
     const startDir = getPortDirection(fromPort);
     const endDir = getPortDirection(toPort);
-
-    // Offset pour sortir du bloc avant de commencer le routage
     const offset = ROUTING.MARGIN;
     const p0 = { x: start.x + startDir.x * offset, y: start.y + startDir.y * offset };
     const pN = { x: end.x - endDir.x * offset, y: end.y - endDir.y * offset };
-
-    // Déterminer la stratégie selon la configuration
     const rel = analyzeRelativePosition(fromNode, toNode);
     const points = [start, p0];
-
-    // Obstacles (tous les autres nœuds)
     const obstacles = allNodes.filter(n => n.id !== fromNode.id && n.id !== toNode.id)
       .map(n => getExpandedBounds(n));
 
-    // Stratégie simple et robuste :
-    // 1. Si les deux ports sont alignés sur le même axe (ex: left → right), on trace direct
-    // 2. Sinon on fait un Z ou un L selon la configuration
-
-    const isAligned =
-      ((fromPort === 'left' || fromPort === 'right') && (toPort === 'left' || toPort === 'right')) ||
-      ((fromPort === 'top' || fromPort === 'bottom') && (toPort === 'top' || toPort === 'bottom'));
-
-    // Même orientation (ex: les deux horizontaux)
-    const sameAxis =
-      ((fromPort === 'left' || fromPort === 'right') && (toPort === 'left' || toPort === 'right')) ||
-      ((fromPort === 'top' || fromPort === 'bottom') && (toPort === 'top' || toPort === 'bottom'));
-
     if (fromPort === 'right' && toPort === 'left' && p0.x < pN.x) {
-      // Sortie droite, entrée gauche, avec espace entre
       const midX = (p0.x + pN.x) / 2;
-      if (Math.abs(p0.y - pN.y) < 5) {
-        // Aligné horizontalement : trait direct
-        points.push(pN, end);
-      } else {
-        // Z
-        points.push({ x: midX, y: p0.y });
-        points.push({ x: midX, y: pN.y });
-        points.push(pN, end);
-      }
+      if (Math.abs(p0.y - pN.y) < 5) { points.push(pN, end); }
+      else { points.push({ x: midX, y: p0.y }, { x: midX, y: pN.y }, pN, end); }
     } else if (fromPort === 'left' && toPort === 'right' && p0.x > pN.x) {
       const midX = (p0.x + pN.x) / 2;
-      if (Math.abs(p0.y - pN.y) < 5) {
-        points.push(pN, end);
-      } else {
-        points.push({ x: midX, y: p0.y });
-        points.push({ x: midX, y: pN.y });
-        points.push(pN, end);
-      }
+      if (Math.abs(p0.y - pN.y) < 5) { points.push(pN, end); }
+      else { points.push({ x: midX, y: p0.y }, { x: midX, y: pN.y }, pN, end); }
     } else if (fromPort === 'bottom' && toPort === 'top' && p0.y < pN.y) {
       const midY = (p0.y + pN.y) / 2;
-      if (Math.abs(p0.x - pN.x) < 5) {
-        points.push(pN, end);
-      } else {
-        points.push({ x: p0.x, y: midY });
-        points.push({ x: pN.x, y: midY });
-        points.push(pN, end);
-      }
+      if (Math.abs(p0.x - pN.x) < 5) { points.push(pN, end); }
+      else { points.push({ x: p0.x, y: midY }, { x: pN.x, y: midY }, pN, end); }
     } else if (fromPort === 'top' && toPort === 'bottom' && p0.y > pN.y) {
       const midY = (p0.y + pN.y) / 2;
-      if (Math.abs(p0.x - pN.x) < 5) {
-        points.push(pN, end);
-      } else {
-        points.push({ x: p0.x, y: midY });
-        points.push({ x: pN.x, y: midY });
-        points.push(pN, end);
-      }
+      if (Math.abs(p0.x - pN.x) < 5) { points.push(pN, end); }
+      else { points.push({ x: p0.x, y: midY }, { x: pN.x, y: midY }, pN, end); }
     } else {
-      // Cas généraux : ports opposés ou même côté → stratégie en escalier
-      // D'abord aller vers le point médian, puis rejoindre
       if (fromPort === 'right' || fromPort === 'left') {
-        // Sortie horizontale : aller jusqu'à l'X de la cible puis vertical
         const extendX = fromPort === 'right'
           ? Math.max(p0.x + offset, pN.x + (toPort === 'left' ? -offset : offset))
           : Math.min(p0.x - offset, pN.x + (toPort === 'right' ? offset : -offset));
-
         if (toPort === 'top' || toPort === 'bottom') {
-          points.push({ x: extendX, y: p0.y });
-          points.push({ x: extendX, y: pN.y });
-          points.push(pN, end);
+          points.push({ x: extendX, y: p0.y }, { x: extendX, y: pN.y }, pN, end);
         } else {
-          // Les deux sont horizontaux mais pas face à face
           const midY = (p0.y + pN.y) / 2;
-          points.push({ x: extendX, y: p0.y });
-          points.push({ x: extendX, y: midY });
-          points.push({ x: pN.x, y: midY });
-          points.push(pN, end);
+          points.push({ x: extendX, y: p0.y }, { x: extendX, y: midY }, { x: pN.x, y: midY }, pN, end);
         }
       } else {
-        // Sortie verticale
         const extendY = fromPort === 'bottom'
           ? Math.max(p0.y + offset, pN.y + (toPort === 'top' ? -offset : offset))
           : Math.min(p0.y - offset, pN.y + (toPort === 'bottom' ? offset : -offset));
-
         if (toPort === 'left' || toPort === 'right') {
-          points.push({ x: p0.x, y: extendY });
-          points.push({ x: pN.x, y: extendY });
-          points.push(pN, end);
+          points.push({ x: p0.x, y: extendY }, { x: pN.x, y: extendY }, pN, end);
         } else {
           const midX = (p0.x + pN.x) / 2;
-          points.push({ x: p0.x, y: extendY });
-          points.push({ x: midX, y: extendY });
-          points.push({ x: midX, y: pN.y });
-          points.push(pN, end);
+          points.push({ x: p0.x, y: extendY }, { x: midX, y: extendY }, { x: midX, y: pN.y }, pN, end);
         }
       }
     }
-
-    // Dédupliquer les points identiques
     return dedupePoints(points);
   }
 
-  /**
-   * Routage en courbes douces (Bézier cubique)
-   */
   function routeCurved(fromNode, fromPort, toNode, toPort) {
     const start = getPortPosition(fromNode, fromPort);
     const end = getPortPosition(toNode, toPort);
     const startDir = getPortDirection(fromPort);
-    const endDir = getPortDirection(toNode, toPort);
-
-    // Distance entre les deux points
+    const endDir = getPortDirection(toPort);
     const dist = Math.hypot(end.x - start.x, end.y - start.y);
     const tension = Math.min(dist * ROUTING.CURVE_TENSION, 100);
-
-    // Points de contrôle alignés avec la direction des ports
-    const cp1 = {
-      x: start.x + startDir.x * tension,
-      y: start.y + startDir.y * tension
-    };
-    const cp2 = {
-      x: end.x - endDir.x * tension,
-      y: end.y - endDir.y * tension
-    };
-
-    return {
-      type: 'bezier',
-      start, end, cp1, cp2
-    };
+    const cp1 = { x: start.x + startDir.x * tension, y: start.y + startDir.y * tension };
+    const cp2 = { x: end.x - endDir.x * tension, y: end.y - endDir.y * tension };
+    return { type: 'bezier', start, end, cp1, cp2 };
   }
 
-  /**
-   * Routage direct (ligne droite)
-   */
   function routeDirect(fromNode, toNode) {
     const start = { x: fromNode.x + fromNode.width / 2, y: fromNode.y + fromNode.height / 2 };
     const end = { x: toNode.x + toNode.width / 2, y: toNode.y + toNode.height / 2 };
-
-    // Calculer les points d'intersection avec les contours
     const p1 = intersectWithRect(fromNode, end);
     const p2 = intersectWithRect(toNode, start);
-
-    return {
-      type: 'line',
-      start: p1,
-      end: p2
-    };
+    return { type: 'line', start: p1, end: p2 };
   }
 
-  /**
-   * Calcule l'intersection d'une ligne partant du centre vers un point cible
-   * avec le contour rectangulaire du nœud
-   */
   function intersectWithRect(node, target) {
     const cx = node.x + node.width / 2;
     const cy = node.y + node.height / 2;
     const dx = target.x - cx;
     const dy = target.y - cy;
     if (dx === 0 && dy === 0) return { x: cx, y: cy };
-
     const halfW = node.width / 2;
     const halfH = node.height / 2;
     const candidates = [];
@@ -748,9 +582,6 @@ const Routing = (() => {
     return { x: cx + dx * t, y: cy + dy * t };
   }
 
-  /**
-   * Élimine les points consécutifs dupliqués ou très proches
-   */
   function dedupePoints(points) {
     const EPS = 1;
     const result = [points[0]];
@@ -763,268 +594,174 @@ const Routing = (() => {
     return result;
   }
 
-  /**
-   * Convertit une liste de points en path SVG avec arrondis
-   */
   function pointsToRoundedPath(points, radius = ROUTING.CORNER_RADIUS) {
     if (points.length < 2) return '';
-    if (points.length === 2) {
-      return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
-    }
-
+    if (points.length === 2) return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
     let d = `M ${points[0].x} ${points[0].y}`;
-
     for (let i = 1; i < points.length - 1; i++) {
-      const prev = points[i - 1];
-      const curr = points[i];
-      const next = points[i + 1];
-
-      // Distance aux segments
+      const prev = points[i - 1], curr = points[i], next = points[i + 1];
       const d1 = Math.hypot(curr.x - prev.x, curr.y - prev.y);
       const d2 = Math.hypot(next.x - curr.x, next.y - curr.y);
-
-      // Rayon effectif (ne pas dépasser la moitié du segment le plus court)
       const r = Math.min(radius, d1 / 2, d2 / 2);
-
-      // Vecteurs normalisés
-      const v1x = (prev.x - curr.x) / d1;
-      const v1y = (prev.y - curr.y) / d1;
-      const v2x = (next.x - curr.x) / d2;
-      const v2y = (next.y - curr.y) / d2;
-
-      // Points de début et fin de l'arc
+      const v1x = (prev.x - curr.x) / d1, v1y = (prev.y - curr.y) / d1;
+      const v2x = (next.x - curr.x) / d2, v2y = (next.y - curr.y) / d2;
       const p1 = { x: curr.x + v1x * r, y: curr.y + v1y * r };
       const p2 = { x: curr.x + v2x * r, y: curr.y + v2y * r };
-
-      // Flag pour le sweep (déterminer le sens de l'arc)
       const cross = v1x * v2y - v1y * v2x;
       const sweep = cross < 0 ? 1 : 0;
-
-      d += ` L ${p1.x} ${p1.y}`;
-      d += ` A ${r} ${r} 0 0 ${sweep} ${p2.x} ${p2.y}`;
+      d += ` L ${p1.x} ${p1.y} A ${r} ${r} 0 0 ${sweep} ${p2.x} ${p2.y}`;
     }
-
-    // Dernier segment droit
     const last = points[points.length - 1];
     d += ` L ${last.x} ${last.y}`;
-
     return d;
   }
 
-  /**
-   * Convertit une courbe Bézier en path SVG
-   */
   function bezierToPath(curve) {
     return `M ${curve.start.x} ${curve.start.y} C ${curve.cp1.x} ${curve.cp1.y}, ${curve.cp2.x} ${curve.cp2.y}, ${curve.end.x} ${curve.end.y}`;
   }
 
-  /**
-   * FONCTION PRINCIPALE : calcule le path SVG complet pour une connexion
-   * C'est le point d'entrée unique utilisé par le rendu
-   */
   function calculatePath(conn, fromNode, toNode, allNodes, mode) {
-    // 1. Déterminer les ports (fixes si spécifiés, sinon auto)
     let fromPort = conn.fromPort || 'auto';
     let toPort = conn.toPort || 'auto';
-
     if (fromPort === 'auto' || toPort === 'auto') {
       const smart = chooseSmartPorts(fromNode, toNode);
       if (fromPort === 'auto') fromPort = smart.fromPort;
       if (toPort === 'auto') toPort = smart.toPort;
     }
-
-    // 2. Calculer le chemin selon le mode
     const effectiveMode = mode || state.routingMode;
-
     if (effectiveMode === 'direct') {
       const route = routeDirect(fromNode, toNode);
-      return {
-        d: `M ${route.start.x} ${route.start.y} L ${route.end.x} ${route.end.y}`,
-        points: [route.start, route.end],
-        type: 'line'
-      };
+      return { d: `M ${route.start.x} ${route.start.y} L ${route.end.x} ${route.end.y}`, points: [route.start, route.end], type: 'line' };
     }
-
     if (effectiveMode === 'curved') {
       const curve = routeCurved(fromNode, fromPort, toNode, toPort);
-      return {
-        d: bezierToPath(curve),
-        points: [curve.start, curve.cp1, curve.cp2, curve.end],
-        type: 'bezier'
-      };
+      return { d: bezierToPath(curve), points: [curve.start, curve.cp1, curve.cp2, curve.end], type: 'bezier' };
     }
-
-    // Mode orthogonal ou smart
     const points = routeOrthogonal(fromNode, fromPort, toNode, toPort, allNodes);
-
     if (effectiveMode === 'smart' || effectiveMode === 'orthogonal') {
-      return {
-        d: pointsToRoundedPath(points, ROUTING.CORNER_RADIUS),
-        points: points,
-        type: 'orthogonal'
-      };
+      return { d: pointsToRoundedPath(points, ROUTING.CORNER_RADIUS), points, type: 'orthogonal' };
     }
-
-    return {
-      d: pointsToRoundedPath(points, 0),
-      points: points,
-      type: 'orthogonal'
-    };
+    return { d: pointsToRoundedPath(points, 0), points, type: 'orthogonal' };
   }
 
-  /**
-   * Retourne le point central d'un path (pour positionner les étiquettes)
-   */
   function getMidpoint(pathResult) {
-    if (!pathResult.points || pathResult.points.length < 2) {
-      return { x: 0, y: 0 };
-    }
+    if (!pathResult.points || pathResult.points.length < 2) return { x: 0, y: 0 };
     const points = pathResult.points;
     if (pathResult.type === 'bezier') {
-      // Pour une Bézier, le milieu entre start et end
-      return {
-        x: (points[0].x + points[3].x) / 2,
-        y: (points[0].y + points[3].y) / 2
-      };
+      return { x: (points[0].x + points[3].x) / 2, y: (points[0].y + points[3].y) / 2 };
     }
-    // Pour orthogonal, on prend le point central
     const mid = Math.floor(points.length / 2);
     if (points.length % 2 === 0) {
-      return {
-        x: (points[mid - 1].x + points[mid].x) / 2,
-        y: (points[mid - 1].y + points[mid].y) / 2
-      };
+      return { x: (points[mid - 1].x + points[mid].x) / 2, y: (points[mid - 1].y + points[mid].y) / 2 };
     }
     return { x: points[mid].x, y: points[mid].y };
   }
 
-  /**
-   * Retourne la longueur totale d'un path (pour les calculs de dasharray)
-   */
   function getPathLength(pathResult) {
     if (!pathResult.points) return 0;
     let len = 0;
     const pts = pathResult.points;
-    for (let i = 1; i < pts.length; i++) {
-      len += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
-    }
+    for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
     return len;
   }
 
-  return {
-    getPortPosition,
-    getPortDirection,
-    chooseSmartPorts,
-    calculatePath,
-    getMidpoint,
-    getPathLength,
-    routeOrthogonal,
-    routeCurved,
-    routeDirect,
-    pointsToRoundedPath,
-  };
+  return { getPortPosition, getPortDirection, chooseSmartPorts, calculatePath, getMidpoint, getPathLength, routeOrthogonal, routeCurved, routeDirect, pointsToRoundedPath };
 })();
 
 /* ============================================================
-   UTILITAIRES GÉNÉRAUX
+   UTILITAIRES
    ============================================================ */
-function snap(value) {
-  return state.snapToGrid ? Math.round(value / GRID_SIZE) * GRID_SIZE : value;
-}
-
-function showToast(message, duration = 2000) {
-  toastEl.textContent = message;
-  toastEl.classList.add('show');
-  clearTimeout(toastEl._timeout);
-  toastEl._timeout = setTimeout(() => toastEl.classList.remove('show'), duration);
-}
-
-function hexToRgb(hex) {
-  const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return r ? { r: parseInt(r[1], 16), g: parseInt(r[2], 16), b: parseInt(r[3], 16) } : { r: 255, g: 255, b: 255 };
-}
-
-function escapeXml(str) {
-  return String(str).replace(/[<>&'"]/g, c => ({ '<':'&lt;', '>':'&gt;', '&':'&amp;', "'":'&apos;', '"':'&quot;' })[c]);
-}
+function snap(val) { return state.snapToGrid ? Math.round(val / GRID_SIZE) * GRID_SIZE : val; }
 
 function toCanvasCoords(e) {
   const rect = canvasContainer.getBoundingClientRect();
-  return {
-    x: (e.clientX - rect.left - state.panX) / state.zoom,
-    y: (e.clientY - rect.top - state.panY) / state.zoom
-  };
+  return { x: (e.clientX - rect.left - state.panX) / state.zoom, y: (e.clientY - rect.top - state.panY) / state.zoom };
+}
+
+function escapeXml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+let toastTimer = null;
+function showToast(msg, duration = 2000) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toastEl.classList.remove('show'), duration);
+}
+
+function generateShapeSVG(type, w, h, borderColor, fillColor) {
+  const sw = 2;
+  const fill = fillColor || 'transparent';
+  switch (type) {
+    case 'terminal':
+      return `<rect width="${w}" height="${h}" rx="${h/2}" fill="${fill}" stroke="${borderColor}" stroke-width="${sw}"/>`;
+    case 'process':
+      return `<rect width="${w}" height="${h}" rx="3" fill="${fill}" stroke="${borderColor}" stroke-width="${sw}"/>`;
+    case 'decision':
+      return `<polygon points="${w/2},0 ${w},${h/2} ${w/2},${h} 0,${h/2}" fill="${fill}" stroke="${borderColor}" stroke-width="${sw}"/>`;
+    case 'io':
+      const sk = w * 0.12;
+      return `<polygon points="${sk},0 ${w},0 ${w-sk},${h} 0,${h}" fill="${fill}" stroke="${borderColor}" stroke-width="${sw}"/>`;
+    case 'document':
+      return `<path d="M0 0 L${w} 0 L${w} ${h*0.7} Q${w*0.75} ${h} ${w/2} ${h*0.7} T0 ${h*0.7} Z" fill="${fill}" stroke="${borderColor}" stroke-width="${sw}"/>`;
+    case 'database':
+      const ry = h * 0.12;
+      return `<ellipse cx="${w/2}" cy="${ry}" rx="${w/2-sw}" ry="${ry}" fill="${fill}" stroke="${borderColor}" stroke-width="${sw}"/><path d="M${sw} ${ry} L${sw} ${h-ry} Q${sw} ${h} ${w/2} ${h} Q${w-sw} ${h} ${w-sw} ${h-ry} L${w-sw} ${ry}" fill="${fill}" stroke="${borderColor}" stroke-width="${sw}"/><ellipse cx="${w/2}" cy="${h-ry}" rx="${w/2-sw}" ry="${ry}" fill="${fill}" stroke="${borderColor}" stroke-width="${sw}"/>`;
+    case 'subprocess':
+      return `<rect width="${w}" height="${h}" rx="3" fill="${fill}" stroke="${borderColor}" stroke-width="${sw}"/><line x1="${w*0.15}" y1="0" x2="${w*0.15}" y2="${h}" stroke="${borderColor}" stroke-width="${sw}"/><line x1="${w*0.85}" y1="0" x2="${w*0.85}" y2="${h}" stroke="${borderColor}" stroke-width="${sw}"/>`;
+    case 'preparation':
+      const px = w * 0.12;
+      return `<polygon points="${px},0 ${w-px},0 ${w},${h/2} ${w-px},${h} ${px},${h} 0,${h/2}" fill="${fill}" stroke="${borderColor}" stroke-width="${sw}"/>`;
+    case 'delay':
+      return `<rect width="${w}" height="${h}" rx="${h/2}" fill="${fill}" stroke="${borderColor}" stroke-width="${sw}"/>`;
+    case 'connector':
+      return `<circle cx="${w/2}" cy="${h/2}" r="${Math.min(w,h)/2-sw}" fill="${fill}" stroke="${borderColor}" stroke-width="${sw}"/>`;
+    default:
+      return `<rect width="${w}" height="${h}" rx="3" fill="${fill}" stroke="${borderColor}" stroke-width="${sw}"/>`;
+  }
 }
 
 /* ============================================================
-   HISTORIQUE (UNDO / REDO)
+   HISTORIQUE (UNDO/REDO)
    ============================================================ */
 function saveHistory() {
-  state.history.push(JSON.stringify({
-    nodes: state.nodes,
-    connections: state.connections,
-    nodeCounter: state.nodeCounter,
-    connectionCounter: state.connectionCounter
-  }));
+  state.history.push(JSON.stringify({ nodes: state.nodes, connections: state.connections, nodeCounter: state.nodeCounter, connectionCounter: state.connectionCounter }));
   if (state.history.length > HISTORY_MAX) state.history.shift();
   state.redoHistory = [];
 }
 
 function undo() {
   if (state.history.length === 0) return;
-  state.redoHistory.push(JSON.stringify({
-    nodes: state.nodes, connections: state.connections,
-    nodeCounter: state.nodeCounter, connectionCounter: state.connectionCounter
-  }));
+  state.redoHistory.push(JSON.stringify({ nodes: state.nodes, connections: state.connections, nodeCounter: state.nodeCounter, connectionCounter: state.connectionCounter }));
   const prev = JSON.parse(state.history.pop());
-  state.nodes = prev.nodes;
-  state.connections = prev.connections;
-  state.nodeCounter = prev.nodeCounter;
-  state.connectionCounter = prev.connectionCounter;
-  state.selectedNodes.clear();
-  state.selectedConnection = null;
-  render();
-  showToast('↶ Annulé');
+  state.nodes = prev.nodes; state.connections = prev.connections;
+  state.nodeCounter = prev.nodeCounter; state.connectionCounter = prev.connectionCounter;
+  state.selectedNodes.clear(); state.selectedConnection = null;
+  render(); autosave(); showToast('↶ Annulé');
 }
 
 function redo() {
   if (state.redoHistory.length === 0) return;
-  state.history.push(JSON.stringify({
-    nodes: state.nodes, connections: state.connections,
-    nodeCounter: state.nodeCounter, connectionCounter: state.connectionCounter
-  }));
+  state.history.push(JSON.stringify({ nodes: state.nodes, connections: state.connections, nodeCounter: state.nodeCounter, connectionCounter: state.connectionCounter }));
   const next = JSON.parse(state.redoHistory.pop());
-  state.nodes = next.nodes;
-  state.connections = next.connections;
-  state.nodeCounter = next.nodeCounter;
-  state.connectionCounter = next.connectionCounter;
-  state.selectedNodes.clear();
-  state.selectedConnection = null;
-  render();
-  showToast('↷ Rétabli');
+  state.nodes = next.nodes; state.connections = next.connections;
+  state.nodeCounter = next.nodeCounter; state.connectionCounter = next.connectionCounter;
+  state.selectedNodes.clear(); state.selectedConnection = null;
+  render(); autosave(); showToast('↷ Rétabli');
 }
 
 /* ============================================================
-   PERSISTANCE
+   AUTOSAVE
    ============================================================ */
-let autosaveTimeout = null;
+let autosaveTimer = null;
 function autosave() {
-  clearTimeout(autosaveTimeout);
-  autosaveTimeout = setTimeout(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        nodes: state.nodes,
-        connections: state.connections,
-        nodeCounter: state.nodeCounter,
-        connectionCounter: state.connectionCounter,
-        zoom: state.zoom,
-        panX: state.panX,
-        panY: state.panY,
-        defaultArrowType: state.defaultArrowType,
-        routingMode: state.routingMode
-      }));
-      saveIndicator.textContent = '💾 ' + new Date().toLocaleTimeString('fr-FR');
-    } catch (err) { console.warn('Autosave impossible :', err); }
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => {
+    const data = { version: 3, nodes: state.nodes, connections: state.connections, nodeCounter: state.nodeCounter, connectionCounter: state.connectionCounter, defaultArrowType: state.defaultArrowType, routingMode: state.routingMode, zoom: state.zoom, panX: state.panX, panY: state.panY };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    saveIndicator.textContent = 'Sauvegardé ✓';
+    setTimeout(() => { saveIndicator.textContent = ''; }, 2000);
   }, 500);
 }
 
@@ -1033,40 +770,15 @@ function restoreAutosave() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return;
     const data = JSON.parse(raw);
-    if (data.nodes) {
-      state.nodes = data.nodes;
-      state.connections = data.connections || [];
-      state.nodeCounter = data.nodeCounter || 0;
-      state.connectionCounter = data.connectionCounter || 0;
-      if (data.zoom) state.zoom = data.zoom;
-      if (data.panX !== undefined) state.panX = data.panX;
-      if (data.panY !== undefined) state.panY = data.panY;
-      if (data.defaultArrowType) state.defaultArrowType = data.defaultArrowType;
-      if (data.routingMode) state.routingMode = data.routingMode;
-      $('defaultArrowType').value = state.defaultArrowType;
-      $('routingMode').value = state.routingMode;
-    }
-  } catch (err) { console.warn('Restauration impossible :', err); }
-}
-
-/* ============================================================
-   GÉNÉRATION SVG DES FORMES
-   ============================================================ */
-function generateShapeSVG(type, width, height, borderColor, fillColor) {
-  const fill = fillColor && fillColor !== 'transparent' ? fillColor : 'var(--bg-secondary)';
-  switch (type) {
-    case 'terminal':    return `<rect width="${width}" height="${height}" rx="${height/2}" fill="${fill}" stroke="${borderColor}" stroke-width="2"/>`;
-    case 'process':     return `<rect width="${width}" height="${height}" rx="4" fill="${fill}" stroke="${borderColor}" stroke-width="2"/>`;
-    case 'decision':    return `<path d="M${width/2} 0 L${width} ${height/2} L${width/2} ${height} L0 ${height/2} Z" fill="${fill}" stroke="${borderColor}" stroke-width="2"/>`;
-    case 'io':          return `<path d="M${width*0.1} 0 L${width} 0 L${width*0.9} ${height} L0 ${height} Z" fill="${fill}" stroke="${borderColor}" stroke-width="2"/>`;
-    case 'document':    return `<path d="M0 0 L${width} 0 L${width} ${height*0.75} Q${width*0.75} ${height*0.95} ${width/2} ${height*0.75} T0 ${height*0.75} Z" fill="${fill}" stroke="${borderColor}" stroke-width="2"/>`;
-    case 'subprocess':  return `<rect width="${width}" height="${height}" rx="4" fill="${fill}" stroke="${borderColor}" stroke-width="2"/><line x1="15" y1="0" x2="15" y2="${height}" stroke="${borderColor}" stroke-width="2"/><line x1="${width-15}" y1="0" x2="${width-15}" y2="${height}" stroke="${borderColor}" stroke-width="2"/>`;
-    case 'database':    return `<ellipse cx="${width/2}" cy="10" rx="${width/2-2}" ry="9" fill="${fill}" stroke="${borderColor}" stroke-width="2"/><path d="M2 10 L2 ${height-10} Q2 ${height} ${width/2} ${height} Q${width-2} ${height} ${width-2} ${height-10} L${width-2} 10" fill="${fill}" stroke="${borderColor}" stroke-width="2"/><ellipse cx="${width/2}" cy="${height-10}" rx="${width/2-2}" ry="9" fill="${fill}" stroke="${borderColor}" stroke-width="2"/>`;
-    case 'connector':   return `<circle cx="${width/2}" cy="${height/2}" r="${width/2-2}" fill="${fill}" stroke="${borderColor}" stroke-width="2"/>`;
-    case 'delay':       return `<rect width="${width}" height="${height}" rx="30" fill="${fill}" stroke="${borderColor}" stroke-width="2"/>`;
-    case 'preparation': return `<path d="M${width*0.15} 0 L${width*0.85} 0 L${width} ${height/2} L${width*0.85} ${height} L${width*0.15} ${height} L0 ${height/2} Z" fill="${fill}" stroke="${borderColor}" stroke-width="2"/>`;
-    default:            return `<rect width="${width}" height="${height}" rx="4" fill="${fill}" stroke="${borderColor}" stroke-width="2"/>`;
-  }
+    if (!Array.isArray(data.nodes)) return;
+    state.nodes = data.nodes; state.connections = data.connections || [];
+    state.nodeCounter = data.nodeCounter || 0; state.connectionCounter = data.connectionCounter || 0;
+    if (data.defaultArrowType) { state.defaultArrowType = data.defaultArrowType; $('defaultArrowType').value = data.defaultArrowType; }
+    if (data.routingMode) { state.routingMode = data.routingMode; $('routingMode').value = data.routingMode; }
+    if (data.zoom) state.zoom = data.zoom;
+    if (data.panX !== undefined) state.panX = data.panX;
+    if (data.panY !== undefined) state.panY = data.panY;
+  } catch (e) { console.warn('Restore failed', e); }
 }
 
 /* ============================================================
@@ -1078,336 +790,307 @@ function updateViewportTransform() {
 }
 
 function render() {
-  canvasViewport.querySelectorAll('.node').forEach(el => el.remove());
-  state.nodes.forEach(node => canvasViewport.appendChild(createNodeElement(node)));
+  renderNodes();
   renderConnections();
   renderProperties();
-  autosave();
 }
 
-function createNodeElement(node) {
-  const div = document.createElement('div');
-  div.className = 'node';
-  if (state.selectedNodes.has(node.id)) div.classList.add('selected');
-  div.style.left = node.x + 'px';
-  div.style.top = node.y + 'px';
-  div.style.width = node.width + 'px';
-  div.style.height = node.height + 'px';
-  div.dataset.id = node.id;
+function renderNodes() {
+  const existing = new Set();
+  canvasViewport.querySelectorAll('.node').forEach(el => {
+    const id = parseInt(el.dataset.id);
+    const node = state.nodes.find(n => n.id === id);
+    if (!node) { el.remove(); return; }
+    existing.add(id);
+    el.style.left = node.x + 'px';
+    el.style.top = node.y + 'px';
+    el.style.width = node.width + 'px';
+    el.style.height = node.height + 'px';
+    el.classList.toggle('selected', state.selectedNodes.has(id));
+    const svgEl = el.querySelector('.node-svg');
+    if (svgEl) {
+      svgEl.setAttribute('width', node.width);
+      svgEl.setAttribute('height', node.height);
+      svgEl.innerHTML = generateShapeSVG(node.type, node.width, node.height, node.borderColor, node.fillColor);
+    }
+    const textEl = el.querySelector('.node-text');
+    if (textEl && !el.querySelector('.node-text-edit')) textEl.textContent = node.text;
+  });
 
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('width', node.width);
-  svg.setAttribute('height', node.height);
-  svg.classList.add('node-svg');
-  svg.innerHTML = generateShapeSVG(node.type, node.width, node.height, node.borderColor, node.fillColor);
-  div.appendChild(svg);
+  state.nodes.forEach(node => {
+    if (existing.has(node.id)) return;
+    const el = document.createElement('div');
+    el.className = 'node' + (state.selectedNodes.has(node.id) ? ' selected' : '');
+    el.dataset.id = node.id;
+    el.style.left = node.x + 'px';
+    el.style.top = node.y + 'px';
+    el.style.width = node.width + 'px';
+    el.style.height = node.height + 'px';
 
-  const textDiv = document.createElement('div');
-  textDiv.className = 'node-text';
-  textDiv.textContent = node.text;
-  if (node.fillColor && node.fillColor !== 'transparent') {
-    const rgb = hexToRgb(node.fillColor);
-    const brightness = (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000;
-    textDiv.style.color = brightness > 128 ? '#24292e' : 'white';
-  } else {
-    textDiv.style.color = node.borderColor;
-  }
-  div.appendChild(textDiv);
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.classList.add('node-svg');
+    svg.setAttribute('width', node.width);
+    svg.setAttribute('height', node.height);
+    svg.innerHTML = generateShapeSVG(node.type, node.width, node.height, node.borderColor, node.fillColor);
+    el.appendChild(svg);
 
-  // 4 ports principaux
-  const anchorPoints = document.createElement('div');
-  anchorPoints.className = 'anchor-points';
-  PORTS.forEach(portId => {
-    const point = document.createElement('div');
-    point.className = `anchor-point ${portId}`;
-    point.dataset.port = portId;
-    point.addEventListener('mousedown', (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      startConnectionDrag(node, portId, e);
+    const text = document.createElement('div');
+    text.className = 'node-text';
+    text.textContent = node.text;
+    el.appendChild(text);
+
+    const anchors = document.createElement('div');
+    anchors.className = 'anchor-points';
+    PORTS.forEach(port => {
+      const dot = document.createElement('div');
+      dot.className = `anchor-point ${port}`;
+      dot.addEventListener('mousedown', (e) => { e.stopPropagation(); e.preventDefault(); startConnectionDrag(node, port, e); });
+      anchors.appendChild(dot);
     });
-    anchorPoints.appendChild(point);
-  });
-  div.appendChild(anchorPoints);
+    el.appendChild(anchors);
 
-  div.addEventListener('mousedown', (e) => {
-    if (e.target.classList.contains('anchor-point')) return;
-    handleNodeMouseDown(node, e);
-  });
+    el.addEventListener('mousedown', (e) => handleNodeMouseDown(node, e));
+    el.addEventListener('dblclick', (e) => { e.stopPropagation(); startTextEdit(node, el); });
 
-  div.addEventListener('dblclick', (e) => {
-    e.stopPropagation();
-    saveHistory();
-    startInlineEdit(node, div, textDiv);
+    canvasViewport.appendChild(el);
   });
-
-  return div;
 }
 
-function startInlineEdit(node, div, textDiv) {
-  const textarea = document.createElement('textarea');
-  textarea.className = 'node-text-edit';
-  textarea.value = node.text;
-  textDiv.style.visibility = 'hidden';
-  div.appendChild(textarea);
-  textarea.focus();
-  textarea.select();
+function startTextEdit(node, el) {
+  const textEl = el.querySelector('.node-text');
+  if (!textEl) return;
+  textEl.style.display = 'none';
+  const ta = document.createElement('textarea');
+  ta.className = 'node-text-edit';
+  ta.value = node.text;
+  el.appendChild(ta);
+  ta.focus();
+  ta.select();
   const finish = () => {
-    node.text = textarea.value || NODE_TYPES[node.type].label;
-    textarea.remove();
-    textDiv.style.visibility = '';
-    render();
+    saveHistory();
+    node.text = ta.value;
+    ta.remove();
+    textEl.style.display = '';
+    textEl.textContent = node.text;
+    autosave();
   };
-  textarea.addEventListener('blur', finish);
-  textarea.addEventListener('keydown', (e) => {
+  ta.addEventListener('blur', finish);
+  ta.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { ta.value = node.text; ta.blur(); }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ta.blur(); }
     e.stopPropagation();
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); finish(); }
-    else if (e.key === 'Escape') { textarea.value = node.text; finish(); }
   });
 }
 
-/* ============================================================
-   RENDU DES CONNEXIONS - NOUVEAU SYSTÈME
-   ============================================================ */
 function renderConnections() {
-  // Effacer tout
-  connectionsSvg.querySelectorAll('.connection-group').forEach(el => el.remove());
+  connectionsSvg.querySelectorAll('.conn-group').forEach(g => g.remove());
 
   state.connections.forEach(conn => {
     const fromNode = state.nodes.find(n => n.id === conn.from);
     const toNode = state.nodes.find(n => n.id === conn.to);
     if (!fromNode || !toNode) return;
 
-    // Utiliser le mode de routage spécifique à la connexion, ou le mode global
-    const mode = conn.routingMode || state.routingMode;
-    const pathResult = Routing.calculatePath(conn, fromNode, toNode, state.nodes, mode);
-
+    const pathResult = Routing.calculatePath(conn, fromNode, toNode, state.nodes);
     const isSelected = state.selectedConnection && state.selectedConnection.id === conn.id;
+    const style = conn.style || state.defaultArrowType;
 
-    // Créer un groupe pour cette connexion
-    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    group.classList.add('connection-group');
-    group.dataset.id = conn.id;
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.classList.add('conn-group');
 
-    // Hitbox invisible (plus large pour faciliter le clic)
     const hitbox = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     hitbox.setAttribute('d', pathResult.d);
     hitbox.classList.add('connection-hitbox');
-    group.appendChild(hitbox);
+    g.appendChild(hitbox);
 
-    // Path visible
-    const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    pathEl.setAttribute('d', pathResult.d);
-    pathEl.classList.add('connection-path');
-    if (isSelected) pathEl.classList.add('selected');
-    if (conn.style === 'dashed') pathEl.classList.add('dashed');
-    if (conn.style === 'thick') pathEl.classList.add('thick');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', pathResult.d);
+    path.classList.add('connection-path');
+    if (isSelected) path.classList.add('selected');
+    if (style === 'thick') path.classList.add('thick');
+    if (style === 'dashed') path.classList.add('dashed');
 
-    // Marqueurs (flèches)
-    const style = conn.style || state.defaultArrowType;
-    if (style === 'arrow' || style === 'thick') {
-      pathEl.setAttribute('marker-end', isSelected ? 'url(#marker-arrow-selected)' : 'url(#marker-arrow)');
-    } else if (style === 'double') {
-      pathEl.setAttribute('marker-end', isSelected ? 'url(#marker-arrow-selected)' : 'url(#marker-arrow)');
-      pathEl.setAttribute('marker-start', isSelected ? 'url(#marker-arrow-selected)' : 'url(#marker-arrow)');
-    } else if (style === 'line') {
-      // Pas de marqueur
-    }
+    if (style === 'arrow' || style === 'thick') path.setAttribute('marker-end', 'url(#marker-arrow)');
+    else if (style === 'double') { path.setAttribute('marker-end', 'url(#marker-arrow)'); path.setAttribute('marker-start', 'url(#marker-arrow)'); }
 
-    group.appendChild(pathEl);
-
-    // Événements sur le hitbox
-    hitbox.addEventListener('click', (e) => {
-      e.stopPropagation();
-      state.selectedConnection = conn;
-      state.selectedNodes.clear();
-      render();
-    });
-    pathEl.addEventListener('click', (e) => {
-      e.stopPropagation();
-      state.selectedConnection = conn;
-      state.selectedNodes.clear();
-      render();
-    });
-
-    // Poignées de rebranchement aux extrémités
     if (isSelected) {
-      const start = pathResult.points[0];
-      const end = pathResult.points[pathResult.points.length - 1];
-
-      [{ end: 'from', point: start }, { end: 'to', point: end }].forEach(({ end, point }) => {
-        const handle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        handle.setAttribute('cx', point.x);
-        handle.setAttribute('cy', point.y);
-        handle.setAttribute('r', 6);
-        handle.classList.add('endpoint-handle');
-        handle.addEventListener('mousedown', (e) => {
-          e.stopPropagation();
-          e.preventDefault();
-          startEndpointDrag(conn, end, pathResult);
-        });
-        group.appendChild(handle);
-      });
+      path.setAttribute('marker-end', 'url(#marker-arrow-selected)');
+      if (style === 'double') path.setAttribute('marker-start', 'url(#marker-arrow-selected)');
     }
 
-    // Étiquette
+    g.appendChild(path);
+
+    if (isSelected) {
+      const pts = pathResult.points;
+      const hFrom = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      hFrom.setAttribute('cx', pts[0].x); hFrom.setAttribute('cy', pts[0].y); hFrom.setAttribute('r', 6);
+      hFrom.classList.add('endpoint-handle');
+      hFrom.addEventListener('mousedown', (e) => { e.stopPropagation(); e.preventDefault(); startEndpointDrag(conn, 'from', pathResult); });
+      g.appendChild(hFrom);
+
+      const hTo = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      hTo.setAttribute('cx', pts[pts.length-1].x); hTo.setAttribute('cy', pts[pts.length-1].y); hTo.setAttribute('r', 6);
+      hTo.classList.add('endpoint-handle');
+      hTo.addEventListener('mousedown', (e) => { e.stopPropagation(); e.preventDefault(); startEndpointDrag(conn, 'to', pathResult); });
+      g.appendChild(hTo);
+    }
+
     if (conn.label) {
       const mid = Routing.getMidpoint(pathResult);
       const tw = conn.label.length * 7 + 16;
       const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      bg.setAttribute('x', mid.x - tw/2);
-      bg.setAttribute('y', mid.y - 14);
-      bg.setAttribute('width', tw);
-      bg.setAttribute('height', 24);
-      bg.setAttribute('rx', 4);
+      bg.setAttribute('x', mid.x - tw/2); bg.setAttribute('y', mid.y - 12);
+      bg.setAttribute('width', tw); bg.setAttribute('height', 24);
       bg.classList.add('connection-label-bg');
-      group.appendChild(bg);
-
-      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      text.setAttribute('x', mid.x);
-      text.setAttribute('y', mid.y + 1);
-      text.setAttribute('text-anchor', 'middle');
-      text.setAttribute('dominant-baseline', 'middle');
-      text.classList.add('connection-label');
-      text.textContent = conn.label;
-      group.appendChild(text);
+      g.appendChild(bg);
+      const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      lbl.setAttribute('x', mid.x); lbl.setAttribute('y', mid.y + 1);
+      lbl.setAttribute('text-anchor', 'middle'); lbl.setAttribute('dominant-baseline', 'middle');
+      lbl.classList.add('connection-label');
+      lbl.textContent = conn.label;
+      g.appendChild(lbl);
     }
 
-    connectionsSvg.appendChild(group);
+    hitbox.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.selectedNodes.clear();
+      state.selectedConnection = conn;
+      render();
+    });
+
+    connectionsSvg.appendChild(g);
   });
 }
 
-/* ============================================================
-   PANNEAU DE PROPRIÉTÉS
-   ============================================================ */
 function renderProperties() {
   if (state.selectedNodes.size === 1) {
     const nodeId = [...state.selectedNodes][0];
     const node = state.nodes.find(n => n.id === nodeId);
     if (!node) return;
-
+    const config = NODE_TYPES[node.type] || {};
     properties.innerHTML = `
       <h3>✏️ Propriétés du bloc</h3>
       <div class="prop-group">
         <label>Type</label>
-        <input type="text" value="${NODE_TYPES[node.type].label}" disabled style="background:var(--bg-tertiary); color:var(--text-muted);">
+        <input type="text" value="${config.label || node.type}" disabled style="opacity:0.6">
       </div>
       <div class="prop-group">
         <label>Texte</label>
-        <textarea id="nodeText">${escapeXml(node.text)}</textarea>
+        <textarea id="propText">${escapeXml(node.text)}</textarea>
+      </div>
+      <div class="prop-row">
+        <div class="prop-group">
+          <label>Bordure</label>
+          <input type="color" id="propBorder" value="${node.borderColor}">
+        </div>
+        <div class="prop-group">
+          <label>Remplissage</label>
+          <input type="color" id="propFill" value="${node.fillColor === 'transparent' ? '#ffffff' : node.fillColor}">
+        </div>
       </div>
       <div class="prop-group">
-        <div class="prop-row">
-          <div>
-            <label>Bordure</label>
-            <input type="color" id="nodeBorderColor" value="${node.borderColor}">
-          </div>
-          <div>
-            <label>Remplissage</label>
-            <input type="color" id="nodeFillColor" value="${node.fillColor === 'transparent' ? '#ffffff' : node.fillColor}">
-          </div>
-        </div>
-        <label class="checkbox-label" style="margin-top:8px">
-          <input type="checkbox" id="nodeTransparent" ${node.fillColor === 'transparent' ? 'checked' : ''}>
+        <label class="checkbox-label">
+          <input type="checkbox" id="propTransparent" ${node.fillColor === 'transparent' ? 'checked' : ''}>
           Fond transparent
         </label>
       </div>
       <div class="prop-group">
         <label>Couleurs rapides</label>
-        <div class="color-presets">
-          ${COLOR_PRESETS.map(c => `<div class="color-preset" style="background:${c}" data-color="${c}"></div>`).join('')}
-        </div>
+        <div class="color-presets" id="colorPresets"></div>
       </div>
       <div class="prop-group">
-        <button class="btn" style="width:100%; margin-bottom:6px;" id="duplicateNodeBtn">📋 Dupliquer</button>
-        <button class="btn danger" style="width:100%" id="deleteNodeBtn">🗑 Supprimer</button>
+        <button class="btn" style="width:100%" id="dupNodeBtn">📋 Dupliquer</button>
+      </div>
+      <div class="prop-group">
+        <button class="btn danger" style="width:100%" id="delNodeBtn">🗑 Supprimer</button>
       </div>
     `;
 
-    $('nodeText').addEventListener('input', (e) => { node.text = e.target.value; render(); });
-    $('nodeBorderColor').addEventListener('input', (e) => { saveHistory(); node.borderColor = e.target.value; render(); });
-    $('nodeFillColor').addEventListener('input', (e) => {
-      if (!$('nodeTransparent').checked) { saveHistory(); node.fillColor = e.target.value; render(); }
+    $('propText').addEventListener('input', (e) => { node.text = e.target.value; renderNodes(); autosave(); });
+    $('propBorder').addEventListener('input', (e) => { saveHistory(); node.borderColor = e.target.value; renderNodes(); });
+    $('propFill').addEventListener('input', (e) => {
+      if (!$('propTransparent').checked) { saveHistory(); node.fillColor = e.target.value; renderNodes(); }
     });
-    $('nodeTransparent').addEventListener('change', (e) => {
+    $('propTransparent').addEventListener('change', (e) => {
       saveHistory();
-      node.fillColor = e.target.checked ? 'transparent' : $('nodeFillColor').value;
-      render();
+      node.fillColor = e.target.checked ? 'transparent' : $('propFill').value;
+      renderNodes();
     });
-    properties.querySelectorAll('.color-preset').forEach(p => {
-      p.addEventListener('click', () => {
-        saveHistory();
-        node.borderColor = p.dataset.color;
-        if (!$('nodeTransparent').checked) {
-          node.fillColor = p.dataset.color;
-          $('nodeFillColor').value = p.dataset.color;
-        }
-        $('nodeBorderColor').value = p.dataset.color;
-        render();
-      });
+
+    const presetsEl = $('colorPresets');
+    COLOR_PRESETS.forEach(c => {
+      const d = document.createElement('div');
+      d.className = 'color-preset';
+      d.style.background = c;
+      d.addEventListener('click', () => { saveHistory(); node.borderColor = c; $('propBorder').value = c; renderNodes(); });
+      presetsEl.appendChild(d);
     });
-    $('duplicateNodeBtn').addEventListener('click', () => duplicateNodes([node]));
-    $('deleteNodeBtn').addEventListener('click', deleteSelected);
+
+    $('dupNodeBtn').addEventListener('click', () => duplicateNodes([node]));
+    $('delNodeBtn').addEventListener('click', deleteSelected);
 
   } else if (state.selectedNodes.size > 1) {
     properties.innerHTML = `
-      <h3>📦 ${state.selectedNodes.size} blocs sélectionnés</h3>
+      <h3>✏️ Sélection multiple</h3>
+      <div class="empty-state">
+        <span class="emoji">📦</span>
+        ${state.selectedNodes.size} éléments sélectionnés<br>
+        <small>Utilisez Suppr pour supprimer, Ctrl+D pour dupliquer</small>
+      </div>
+      <div class="prop-group" style="margin-top:16px">
+        <button class="btn" style="width:100%" id="dupMultiBtn">📋 Dupliquer tout</button>
+      </div>
       <div class="prop-group">
-        <button class="btn" style="width:100%; margin-bottom:6px;" id="duplicateNodesBtn">📋 Dupliquer tout</button>
-        <button class="btn danger" style="width:100%" id="deleteNodesBtn">🗑 Supprimer tout</button>
+        <button class="btn danger" style="width:100%" id="delMultiBtn">🗑 Tout supprimer</button>
       </div>
     `;
-    $('duplicateNodesBtn').addEventListener('click', () => {
-      const selected = state.nodes.filter(n => state.selectedNodes.has(n.id));
-      duplicateNodes(selected);
-    });
-    $('deleteNodesBtn').addEventListener('click', deleteSelected);
+    $('dupMultiBtn').addEventListener('click', () => duplicateNodes(state.nodes.filter(n => state.selectedNodes.has(n.id))));
+    $('delMultiBtn').addEventListener('click', deleteSelected);
 
   } else if (state.selectedConnection) {
     const conn = state.selectedConnection;
     properties.innerHTML = `
-      <h3>➜ Propriétés de la connexion</h3>
+      <h3>🔗 Propriétés de la connexion</h3>
       <div class="prop-group">
-        <label>Libellé</label>
-        <input type="text" id="connLabel" value="${escapeXml(conn.label || '')}" placeholder="Oui, Non, etc.">
+        <label>Étiquette</label>
+        <input type="text" id="connLabel" value="${escapeXml(conn.label || '')}" placeholder="ex: Oui, Non...">
       </div>
       <div class="prop-group">
         <label>Style</label>
         <select id="connStyle">
-          <option value="arrow" ${conn.style==='arrow'?'selected':''}>→ Flèche</option>
-          <option value="line" ${conn.style==='line'?'selected':''}>— Trait</option>
-          <option value="double" ${conn.style==='double'?'selected':''}>↔ Double</option>
-          <option value="dashed" ${conn.style==='dashed'?'selected':''}>- - Pointillé</option>
-          <option value="thick" ${conn.style==='thick'?'selected':''}>▬ Épaisse</option>
+          <option value="arrow" ${conn.style==='arrow'?'selected':''}>Flèche →</option>
+          <option value="line" ${conn.style==='line'?'selected':''}>Trait —</option>
+          <option value="double" ${conn.style==='double'?'selected':''}>Double ↔</option>
+          <option value="dashed" ${conn.style==='dashed'?'selected':''}>Pointillé</option>
+          <option value="thick" ${conn.style==='thick'?'selected':''}>Épais</option>
         </select>
       </div>
       <div class="prop-group">
-        <label>Mode de routage</label>
+        <label>Routage</label>
         <select id="connRouting">
-          <option value="" ${!conn.routingMode?'selected':''}>🔄 Utiliser le global</option>
-          <option value="smart" ${conn.routingMode==='smart'?'selected':''}>🧠 Intelligent</option>
-          <option value="orthogonal" ${conn.routingMode==='orthogonal'?'selected':''}>📐 Orthogonal</option>
-          <option value="curved" ${conn.routingMode==='curved'?'selected':''}>〰️ Courbes</option>
-          <option value="direct" ${conn.routingMode==='direct'?'selected':''}>➡️ Direct</option>
+          <option value="" ${!conn.routingMode?'selected':''}>Par défaut (global)</option>
+          <option value="smart" ${conn.routingMode==='smart'?'selected':''}>Intelligent</option>
+          <option value="orthogonal" ${conn.routingMode==='orthogonal'?'selected':''}>Orthogonal</option>
+          <option value="curved" ${conn.routingMode==='curved'?'selected':''}>Courbes</option>
+          <option value="direct" ${conn.routingMode==='direct'?'selected':''}>Direct</option>
         </select>
       </div>
       <div class="prop-group">
-        <label>Ports (ancrage)</label>
+        <label>Ports</label>
         <div class="prop-row">
-          <div>
+          <div class="prop-group">
             <label style="font-size:11px">Départ</label>
             <select id="connFromPort">
-              <option value="auto" ${conn.fromPort==='auto'||!conn.fromPort?'selected':''}>Auto</option>
+              <option value="auto" ${(!conn.fromPort||conn.fromPort==='auto')?'selected':''}>Auto</option>
               <option value="top" ${conn.fromPort==='top'?'selected':''}>Haut</option>
               <option value="right" ${conn.fromPort==='right'?'selected':''}>Droite</option>
               <option value="bottom" ${conn.fromPort==='bottom'?'selected':''}>Bas</option>
               <option value="left" ${conn.fromPort==='left'?'selected':''}>Gauche</option>
             </select>
           </div>
-          <div>
+          <div class="prop-group">
             <label style="font-size:11px">Arrivée</label>
             <select id="connToPort">
-              <option value="auto" ${conn.toPort==='auto'||!conn.toPort?'selected':''}>Auto</option>
+              <option value="auto" ${(!conn.toPort||conn.toPort==='auto')?'selected':''}>Auto</option>
               <option value="top" ${conn.toPort==='top'?'selected':''}>Haut</option>
               <option value="right" ${conn.toPort==='right'?'selected':''}>Droite</option>
               <option value="bottom" ${conn.toPort==='bottom'?'selected':''}>Bas</option>
@@ -1423,11 +1106,7 @@ function renderProperties() {
 
     $('connLabel').addEventListener('input', (e) => { conn.label = e.target.value; renderConnections(); autosave(); });
     $('connStyle').addEventListener('change', (e) => { saveHistory(); conn.style = e.target.value; renderConnections(); });
-    $('connRouting').addEventListener('change', (e) => {
-      saveHistory();
-      conn.routingMode = e.target.value || null;
-      renderConnections();
-    });
+    $('connRouting').addEventListener('change', (e) => { saveHistory(); conn.routingMode = e.target.value || null; renderConnections(); });
     $('connFromPort').addEventListener('change', (e) => { saveHistory(); conn.fromPort = e.target.value; renderConnections(); });
     $('connToPort').addEventListener('change', (e) => { saveHistory(); conn.toPort = e.target.value; renderConnections(); });
     $('deleteConnBtn').addEventListener('click', deleteSelected);
@@ -1443,7 +1122,7 @@ function renderProperties() {
 }
 
 /* ============================================================
-   ACTIONS : SÉLECTION, SUPPRESSION, DUPLICATION, COPIER/COLLER
+   ACTIONS
    ============================================================ */
 function toggleNodeSelection(node) {
   if (state.selectedNodes.has(node.id)) state.selectedNodes.delete(node.id);
@@ -1514,8 +1193,7 @@ function paste() {
   });
   state.nodes.push(...newNodes);
   const newConns = state.clipboard.connections.map(c => ({
-    ...c, id: ++state.connectionCounter,
-    from: idMap.get(c.from), to: idMap.get(c.to)
+    ...c, id: ++state.connectionCounter, from: idMap.get(c.from), to: idMap.get(c.to)
   }));
   state.connections.push(...newConns);
   state.selectedNodes.clear();
@@ -1527,9 +1205,7 @@ function paste() {
 function nudgeSelection(dx, dy) {
   if (state.selectedNodes.size === 0) return;
   saveHistory();
-  state.nodes.forEach(n => {
-    if (state.selectedNodes.has(n.id)) { n.x += dx; n.y += dy; }
-  });
+  state.nodes.forEach(n => { if (state.selectedNodes.has(n.id)) { n.x += dx; n.y += dy; } });
   render();
 }
 
@@ -1682,51 +1358,31 @@ function setupShapeDrag() {
 }
 
 /* ============================================================
-   🆕 INTERACTIONS : CRÉATION DE CONNEXION (NOUVEAU SYSTÈME)
+   INTERACTIONS : CRÉATION DE CONNEXION
    ============================================================ */
 let connectionDrag = null;
 
 function startConnectionDrag(node, port, e) {
   const startPos = Routing.getPortPosition(node, port);
-  connectionDrag = {
-    fromNode: node,
-    fromPort: port,
-    startPos: startPos,
-    tempLine: null,
-    previewPath: null,
-    targetNode: null,
-    targetPort: null,
-  };
-
-  // Créer une ligne temporaire pointillée
+  connectionDrag = { fromNode: node, fromPort: port, startPos, tempLine: null, previewPath: null, targetNode: null, targetPort: null };
   const tempLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
   tempLine.classList.add('temp-connection-line');
-  tempLine.setAttribute('x1', startPos.x);
-  tempLine.setAttribute('y1', startPos.y);
-  tempLine.setAttribute('x2', startPos.x);
-  tempLine.setAttribute('y2', startPos.y);
+  tempLine.setAttribute('x1', startPos.x); tempLine.setAttribute('y1', startPos.y);
+  tempLine.setAttribute('x2', startPos.x); tempLine.setAttribute('y2', startPos.y);
   connectionsSvg.appendChild(tempLine);
   connectionDrag.tempLine = tempLine;
-
-  // Marquer le nœud source visuellement
   const sourceEl = canvasViewport.querySelector(`.node[data-id="${node.id}"]`);
   if (sourceEl) sourceEl.classList.add('selected');
 }
 
 function handleConnectionDragMove(e) {
   if (!connectionDrag) return;
-  const { fromNode, fromPort, startPos, tempLine } = connectionDrag;
+  const { fromNode, fromPort, tempLine } = connectionDrag;
   const { x: mx, y: my } = toCanvasCoords(e);
-
-  // Nettoyer les précédents highlights
   document.querySelectorAll('.anchor-point.snap-active').forEach(el => el.classList.remove('snap-active'));
-
-  // Chercher un bloc cible
   const hoveredEl = document.elementFromPoint(e.clientX, e.clientY);
   const hoveredNode = hoveredEl ? hoveredEl.closest('.node') : null;
-
   let endX = mx, endY = my;
-  let snappedPort = null;
   connectionDrag.targetNode = null;
   connectionDrag.targetPort = null;
 
@@ -1735,38 +1391,26 @@ function handleConnectionDragMove(e) {
     if (targetId !== fromNode.id) {
       const targetNode = state.nodes.find(n => n.id === targetId);
       if (targetNode) {
-        // Chercher le port le plus proche
-        let bestPort = null;
-        let bestDist = ROUTING.SNAP_RADIUS;
-
+        let bestPort = null, bestDist = ROUTING.SNAP_RADIUS;
         PORTS.forEach(portId => {
           const p = Routing.getPortPosition(targetNode, portId);
           const d = Math.hypot(p.x - mx, p.y - my);
           if (d < bestDist) { bestDist = d; bestPort = portId; }
         });
-
         if (bestPort) {
           const portPos = Routing.getPortPosition(targetNode, bestPort);
-          endX = portPos.x;
-          endY = portPos.y;
-          snappedPort = bestPort;
+          endX = portPos.x; endY = portPos.y;
           connectionDrag.targetNode = targetNode;
           connectionDrag.targetPort = bestPort;
-
-          // Highlighter le port
           const portEl = hoveredNode.querySelector(`.anchor-point.${bestPort}`);
           if (portEl) portEl.classList.add('snap-active');
         } else {
-          // Pas de port proche, on va utiliser un port smart
           connectionDrag.targetNode = targetNode;
           const smart = Routing.chooseSmartPorts(fromNode, targetNode);
           const toPort = smart.toPort;
           const portPos = Routing.getPortPosition(targetNode, toPort);
-          endX = portPos.x;
-          endY = portPos.y;
+          endX = portPos.x; endY = portPos.y;
           connectionDrag.targetPort = toPort;
-
-          // Montrer un aperçu
           const portEl = hoveredNode.querySelector(`.anchor-point.${toPort}`);
           if (portEl) portEl.classList.add('snap-active');
         }
@@ -1774,21 +1418,11 @@ function handleConnectionDragMove(e) {
     }
   }
 
-  // Mettre à jour la ligne temporaire
-  tempLine.setAttribute('x2', endX);
-  tempLine.setAttribute('y2', endY);
+  tempLine.setAttribute('x2', endX); tempLine.setAttribute('y2', endY);
 
-  // Si on a un target, montrer un aperçu du futur path
-  if (connectionDrag.previewPath) {
-    connectionDrag.previewPath.remove();
-    connectionDrag.previewPath = null;
-  }
+  if (connectionDrag.previewPath) { connectionDrag.previewPath.remove(); connectionDrag.previewPath = null; }
   if (connectionDrag.targetNode) {
-    // Créer une connexion temporaire pour prévisualiser
-    const tempConn = {
-      fromPort: fromPort,
-      toPort: connectionDrag.targetPort
-    };
+    const tempConn = { fromPort, toPort: connectionDrag.targetPort };
     const pathResult = Routing.calculatePath(tempConn, fromNode, connectionDrag.targetNode, state.nodes);
     const preview = document.createElementNS('http://www.w3.org/2000/svg', 'path');
     preview.setAttribute('d', pathResult.d);
@@ -1804,26 +1438,18 @@ function handleConnectionDragMove(e) {
 function handleConnectionDragEnd() {
   if (!connectionDrag) return;
   const { fromNode, fromPort, targetNode, targetPort, tempLine, previewPath } = connectionDrag;
-
   if (tempLine) tempLine.remove();
   if (previewPath) previewPath.remove();
   document.querySelectorAll('.anchor-point.snap-active').forEach(el => el.classList.remove('snap-active'));
-
   if (targetNode) {
     saveHistory();
     state.connections.push({
-      id: ++state.connectionCounter,
-      from: fromNode.id,
-      fromPort: fromPort,
-      to: targetNode.id,
-      toPort: targetPort,
-      label: '',
-      style: state.defaultArrowType,
-      routingMode: null  // utilise le global par défaut
+      id: ++state.connectionCounter, from: fromNode.id, fromPort,
+      to: targetNode.id, toPort: targetPort, label: '',
+      style: state.defaultArrowType, routingMode: null
     });
     render();
   }
-
   connectionDrag = null;
 }
 
@@ -1834,11 +1460,7 @@ let endpointDrag = null;
 
 function startEndpointDrag(conn, end, pathResult) {
   const fixedNode = state.nodes.find(n => n.id === (end === 'from' ? conn.to : conn.from));
-  endpointDrag = {
-    conn, end, fixedNode,
-    tempLine: null,
-    snapshot: JSON.stringify({ nodes: state.nodes, connections: state.connections })
-  };
+  endpointDrag = { conn, end, fixedNode, tempLine: null, snapshot: JSON.stringify({ nodes: state.nodes, connections: state.connections }) };
   const tempLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
   tempLine.classList.add('temp-connection-line');
   const start = end === 'from' ? pathResult.points[pathResult.points.length - 1] : pathResult.points[0];
@@ -1852,16 +1474,12 @@ function handleEndpointDragMove(e) {
   if (!endpointDrag) return;
   const { conn, end, tempLine } = endpointDrag;
   const { x: mx, y: my } = toCanvasCoords(e);
-
   document.querySelectorAll('.anchor-point.snap-active').forEach(el => el.classList.remove('snap-active'));
-
   let endX = mx, endY = my;
   endpointDrag.targetNode = null;
   endpointDrag.targetPort = null;
-
   const hoveredEl = document.elementFromPoint(e.clientX, e.clientY);
   const hoveredNode = hoveredEl ? hoveredEl.closest('.node') : null;
-
   if (hoveredNode) {
     const targetId = parseInt(hoveredNode.dataset.id);
     if (targetId !== endpointDrag.fixedNode.id) {
@@ -1884,9 +1502,7 @@ function handleEndpointDragMove(e) {
       }
     }
   }
-
-  tempLine.setAttribute('x2', endX);
-  tempLine.setAttribute('y2', endY);
+  tempLine.setAttribute('x2', endX); tempLine.setAttribute('y2', endY);
 }
 
 function handleEndpointDragEnd() {
@@ -1894,18 +1510,12 @@ function handleEndpointDragEnd() {
   const { conn, end, targetNode, targetPort, tempLine, snapshot } = endpointDrag;
   if (tempLine) tempLine.remove();
   document.querySelectorAll('.anchor-point.snap-active').forEach(el => el.classList.remove('snap-active'));
-
   if (targetNode) {
     state.history.push(snapshot);
     if (state.history.length > HISTORY_MAX) state.history.shift();
     state.redoHistory = [];
-    if (end === 'from') {
-      conn.from = targetNode.id;
-      conn.fromPort = targetPort;
-    } else {
-      conn.to = targetNode.id;
-      conn.toPort = targetPort;
-    }
+    if (end === 'from') { conn.from = targetNode.id; conn.fromPort = targetPort; }
+    else { conn.to = targetNode.id; conn.toPort = targetPort; }
     render();
   }
   endpointDrag = null;
@@ -1959,6 +1569,7 @@ function handleMarqueeMove(e) {
   marquee.element.style.height = Math.abs(curY - marquee.startY) + 'px';
 }
 
+// ✅ CORRECTION : Nettoyage sécurisé du rectangle de sélection
 function handleMarqueeEnd(e) {
   if (!marquee) return;
   const rect = canvasContainer.getBoundingClientRect();
@@ -1976,9 +1587,61 @@ function handleMarqueeEnd(e) {
       state.selectedNodes.add(n.id);
     }
   });
-  marquee.element.remove();
+
+  // ✅ Vérification avant suppression pour éviter les erreurs
+  if (marquee.element && marquee.element.parentNode) {
+    marquee.element.remove();
+  }
   marquee = null;
   render();
+}
+
+/* ============================================================
+   ✅ CORRECTION : FONCTION GLOBALE D'ANNULATION DES INTERACTIONS
+   Annule proprement TOUTES les interactions en cours.
+   Appelé en cas de perte de focus, mouseleave, ou Escape.
+   ============================================================ */
+function cancelAllInteractions() {
+  // Annuler le marquee (rectangle de sélection)
+  if (marquee) {
+    if (marquee.element && marquee.element.parentNode) {
+      marquee.element.remove();
+    }
+    marquee = null;
+  }
+
+  // Annuler le drag de nœud
+  if (dragState) {
+    dragState = null;
+  }
+
+  // Annuler le pan
+  if (panState) {
+    panState = null;
+    canvasContainer.classList.remove('panning');
+  }
+
+  // Annuler la création de connexion
+  if (connectionDrag) {
+    if (connectionDrag.tempLine) connectionDrag.tempLine.remove();
+    if (connectionDrag.previewPath) connectionDrag.previewPath.remove();
+    document.querySelectorAll('.anchor-point.snap-active').forEach(el => el.classList.remove('snap-active'));
+    connectionDrag = null;
+  }
+
+  // Annuler le rebranchement d'extrémité
+  if (endpointDrag) {
+    if (endpointDrag.tempLine) endpointDrag.tempLine.remove();
+    document.querySelectorAll('.anchor-point.snap-active').forEach(el => el.classList.remove('snap-active'));
+    endpointDrag = null;
+  }
+
+  // ✅ Nettoyer tous les rectangles de sélection orphelins dans le DOM
+  canvasContainer.querySelectorAll('.selection-rectangle').forEach(el => el.remove());
+
+  // Réinitialiser l'état espace
+  spacePressed = false;
+  canvasContainer.classList.remove('panning');
 }
 
 /* ============================================================
@@ -1996,7 +1659,6 @@ function buildExportSVG() {
   const height = maxY - minY + padding * 2;
   const offsetX = -minX + padding;
   const offsetY = -minY + padding;
-
   const isDark = document.documentElement.dataset.theme === 'dark';
   const bgFill = isDark ? '#0d1117' : '#ffffff';
   const lineColor = isDark ? '#8b949e' : '#586069';
@@ -2180,16 +1842,8 @@ function setupGlobalEvents() {
     $('gridToggleBtn').classList.toggle('active', state.showGrid);
   });
 
-  $('routingMode').addEventListener('change', (e) => {
-    state.routingMode = e.target.value;
-    renderConnections();
-    autosave();
-  });
-
-  $('defaultArrowType').addEventListener('change', (e) => {
-    state.defaultArrowType = e.target.value;
-    autosave();
-  });
+  $('routingMode').addEventListener('change', (e) => { state.routingMode = e.target.value; renderConnections(); autosave(); });
+  $('defaultArrowType').addEventListener('change', (e) => { state.defaultArrowType = e.target.value; autosave(); });
 
   $('exportSvgBtn').addEventListener('click', downloadSVG);
   $('exportPngBtn').addEventListener('click', downloadPNG);
@@ -2234,7 +1888,13 @@ function setupGlobalEvents() {
     setZoom(state.zoom * delta, e.clientX, e.clientY);
   }, { passive: false });
 
-  canvasContainer.addEventListener('contextmenu', e => e.preventDefault());
+  // ✅ CORRECTION : Clic droit annule les interactions en cours
+  canvasContainer.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (marquee || dragState || connectionDrag || endpointDrag || panState) {
+      cancelAllInteractions();
+    }
+  });
 
   window.addEventListener('keydown', (e) => {
     const tag = document.activeElement && document.activeElement.tagName;
@@ -2259,14 +1919,16 @@ function setupGlobalEvents() {
       return;
     }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelected(); return; }
+
+    // ✅ CORRECTION : Escape annule TOUTES les interactions en cours
     if (e.key === 'Escape') {
-      if (connectionDrag) {
-        if (connectionDrag.tempLine) connectionDrag.tempLine.remove();
-        if (connectionDrag.previewPath) connectionDrag.previewPath.remove();
-        connectionDrag = null;
-      } else { state.selectedNodes.clear(); state.selectedConnection = null; render(); }
+      cancelAllInteractions();
+      state.selectedNodes.clear();
+      state.selectedConnection = null;
+      render();
       return;
     }
+
     const nudge = e.shiftKey ? 10 : 1;
     if (e.key === 'ArrowLeft')  { e.preventDefault(); nudgeSelection(-nudge, 0); }
     if (e.key === 'ArrowRight') { e.preventDefault(); nudgeSelection(nudge, 0); }
@@ -2279,6 +1941,24 @@ function setupGlobalEvents() {
   });
 
   canvasViewport.addEventListener('dragstart', e => e.preventDefault());
+
+  // ✅ CORRECTION : Si la souris quitte la fenêtre pendant une interaction
+  window.addEventListener('mouseleave', () => {
+    cancelAllInteractions();
+  });
+
+  // ✅ CORRECTION : Si la fenêtre perd le focus (Alt+Tab, clic sur une autre app...)
+  window.addEventListener('blur', () => {
+    cancelAllInteractions();
+  });
+
+  // ✅ CORRECTION : Sécurité supplémentaire - pointerup sur le document entier
+  document.addEventListener('pointerup', () => {
+    // Si aucun état d'interaction n'est actif mais qu'il reste des éléments orphelins
+    if (!marquee && !dragState && !panState && !connectionDrag && !endpointDrag) {
+      canvasContainer.querySelectorAll('.selection-rectangle').forEach(el => el.remove());
+    }
+  });
 }
 
 /* ============================================================
