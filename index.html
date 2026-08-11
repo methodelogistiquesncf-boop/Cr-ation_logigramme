@@ -1258,6 +1258,9 @@ let dragState = null;
 function handleNodeMouseDown(node, e) {
   if (e.button !== 0) return;
   if (e.shiftKey) { toggleNodeSelection(node); return; }
+  // Capture le pointer pour garantir le pointerup meme si la souris sort du noeud
+  var nodeEl = canvasViewport.querySelector(".node[data-id=\"" + node.id + "\"]");
+  if (nodeEl && e.pointerId !== undefined) { try { nodeEl.setPointerCapture(e.pointerId); } catch(ex) {} }
   if (!state.selectedNodes.has(node.id)) {
     state.selectedNodes.clear();
     state.selectedConnection = null;
@@ -1363,6 +1366,9 @@ function setupShapeDrag() {
 let connectionDrag = null;
 
 function startConnectionDrag(node, port, e) {
+  // Capture le pointer pour garantir le pointerup
+  var anchorEl = e.target;
+  if (anchorEl && e.pointerId !== undefined) { try { anchorEl.setPointerCapture(e.pointerId); } catch(ex) {} }
   const startPos = Routing.getPortPosition(node, port);
   connectionDrag = { fromNode: node, fromPort: port, startPos, tempLine: null, previewPath: null, targetNode: null, targetPort: null };
   const tempLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -1857,9 +1863,11 @@ function setupGlobalEvents() {
 
   canvasContainer.addEventListener('mousedown', (e) => {
     if (e.target === canvasContainer || e.target === canvasViewport || e.target === connectionsSvg) {
-      // ✅ FIX : Capturer le pointer pour garantir le pointerup
-      canvasContainer.setPointerCapture(e.pointerId);
-      if (e.button === 1 || (e.button === 0 && spacePressed)) { e.preventDefault(); startPan(e); }
+      if (e.button === 1 || (e.button === 0 && spacePressed)) {
+        e.preventDefault();
+        canvasContainer.setPointerCapture(e.pointerId);
+        startPan(e);
+      }
       else if (e.button === 0) {
         state.selectedNodes.clear();
         state.selectedConnection = null;
