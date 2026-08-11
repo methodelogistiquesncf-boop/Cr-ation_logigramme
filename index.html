@@ -1590,7 +1590,10 @@ function handleMarqueeEnd(e) {
 
   // ✅ Vérification avant suppression pour éviter les erreurs
   if (marquee.element && marquee.element.parentNode) {
+     // ✅ CORRECTION : Vérification avant suppression
+  if (marquee.element && marquee.element.parentNode) {
     marquee.element.remove();
+  }
   }
   marquee = null;
   render();
@@ -1809,6 +1812,31 @@ function loadTheme() {
   const saved = localStorage.getItem('logigramme_theme');
   if (saved) document.documentElement.dataset.theme = saved;
 }
+/* ============================================================
+   ✅ CORRECTION : FONCTION GLOBALE D'ANNULATION DES INTERACTIONS
+   ============================================================ */
+function cancelAllInteractions() {
+  if (marquee) {
+    if (marquee.element && marquee.element.parentNode) marquee.element.remove();
+    marquee = null;
+  }
+  if (dragState) dragState = null;
+  if (panState) { panState = null; canvasContainer.classList.remove('panning'); }
+  if (connectionDrag) {
+    if (connectionDrag.tempLine) connectionDrag.tempLine.remove();
+    if (connectionDrag.previewPath) connectionDrag.previewPath.remove();
+    document.querySelectorAll('.anchor-point.snap-active').forEach(el => el.classList.remove('snap-active'));
+    connectionDrag = null;
+  }
+  if (endpointDrag) {
+    if (endpointDrag.tempLine) endpointDrag.tempLine.remove();
+    document.querySelectorAll('.anchor-point.snap-active').forEach(el => el.classList.remove('snap-active'));
+    endpointDrag = null;
+  }
+  canvasContainer.querySelectorAll('.selection-rectangle').forEach(el => el.remove());
+  spacePressed = false;
+  canvasContainer.classList.remove('panning');
+}
 
 /* ============================================================
    EVENT LISTENERS
@@ -1888,7 +1916,7 @@ function setupGlobalEvents() {
     setZoom(state.zoom * delta, e.clientX, e.clientY);
   }, { passive: false });
 
-  // ✅ CORRECTION : Clic droit annule les interactions en cours
+  // ✅ CORRECTION : Clic droit annule les interactions
   canvasContainer.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     if (marquee || dragState || connectionDrag || endpointDrag || panState) {
@@ -1920,7 +1948,7 @@ function setupGlobalEvents() {
     }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSelected(); return; }
 
-    // ✅ CORRECTION : Escape annule TOUTES les interactions en cours
+    // ✅ CORRECTION : Escape annule TOUTES les interactions
     if (e.key === 'Escape') {
       cancelAllInteractions();
       state.selectedNodes.clear();
@@ -1940,6 +1968,18 @@ function setupGlobalEvents() {
     if (e.code === 'Space') { spacePressed = false; if (!panState) canvasContainer.classList.remove('panning'); }
   });
 
+  // ✅ CORRECTION : Souris quitte la fenêtre
+  window.addEventListener('mouseleave', () => { cancelAllInteractions(); });
+
+  // ✅ CORRECTION : Fenêtre perd le focus (Alt+Tab)
+  window.addEventListener('blur', () => { cancelAllInteractions(); });
+
+  // ✅ CORRECTION : Sécurité pointerup
+  document.addEventListener('pointerup', () => {
+    if (!marquee && !dragState && !panState && !connectionDrag && !endpointDrag) {
+      canvasContainer.querySelectorAll('.selection-rectangle').forEach(el => el.remove());
+    }
+  });
   canvasViewport.addEventListener('dragstart', e => e.preventDefault());
 
   // ✅ CORRECTION : Si la souris quitte la fenêtre pendant une interaction
