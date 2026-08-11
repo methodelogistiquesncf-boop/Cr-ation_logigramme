@@ -1258,9 +1258,6 @@ let dragState = null;
 function handleNodeMouseDown(node, e) {
   if (e.button !== 0) return;
   if (e.shiftKey) { toggleNodeSelection(node); return; }
-  // Capture le pointer pour garantir le pointerup meme si la souris sort du noeud
-  var nodeEl = canvasViewport.querySelector(".node[data-id=\"" + node.id + "\"]");
-  if (nodeEl && e.pointerId !== undefined) { try { nodeEl.setPointerCapture(e.pointerId); } catch(ex) {} }
   if (!state.selectedNodes.has(node.id)) {
     state.selectedNodes.clear();
     state.selectedConnection = null;
@@ -1366,9 +1363,6 @@ function setupShapeDrag() {
 let connectionDrag = null;
 
 function startConnectionDrag(node, port, e) {
-  // Capture le pointer pour garantir le pointerup
-  var anchorEl = e.target;
-  if (anchorEl && e.pointerId !== undefined) { try { anchorEl.setPointerCapture(e.pointerId); } catch(ex) {} }
   const startPos = Routing.getPortPosition(node, port);
   connectionDrag = { fromNode: node, fromPort: port, startPos, tempLine: null, previewPath: null, targetNode: null, targetPort: null };
   const tempLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -1865,7 +1859,6 @@ function setupGlobalEvents() {
     if (e.target === canvasContainer || e.target === canvasViewport || e.target === connectionsSvg) {
       if (e.button === 1 || (e.button === 0 && spacePressed)) {
         e.preventDefault();
-        canvasContainer.setPointerCapture(e.pointerId);
         startPan(e);
       }
       else if (e.button === 0) {
@@ -1897,12 +1890,6 @@ function setupGlobalEvents() {
   window.addEventListener('mouseleave', function() { cancelAllInteractions(); });
   window.addEventListener('blur', function() { cancelAllInteractions(); });
 
-  // ✅ Sécurité : pointerup supplémentaire sur window
-  window.addEventListener('pointerup', function() {
-    if (!marquee && !dragState && !panState && !connectionDrag && !endpointDrag) {
-      canvasContainer.querySelectorAll('.selection-rectangle').forEach(function(el){el.remove();});
-    }
-  });
 
   canvasContainer.addEventListener('wheel', (e) => {
     e.preventDefault();
@@ -1963,24 +1950,6 @@ function setupGlobalEvents() {
   });
 
   canvasViewport.addEventListener('dragstart', e => e.preventDefault());
-
-  // ✅ CORRECTION : Si la souris quitte la fenêtre pendant une interaction
-  window.addEventListener('mouseleave', () => {
-    cancelAllInteractions();
-  });
-
-  // ✅ CORRECTION : Si la fenêtre perd le focus (Alt+Tab, clic sur une autre app...)
-  window.addEventListener('blur', () => {
-    cancelAllInteractions();
-  });
-
-  // ✅ CORRECTION : Sécurité supplémentaire - pointerup sur le document entier
-  document.addEventListener('pointerup', () => {
-    // Si aucun état d'interaction n'est actif mais qu'il reste des éléments orphelins
-    if (!marquee && !dragState && !panState && !connectionDrag && !endpointDrag) {
-      canvasContainer.querySelectorAll('.selection-rectangle').forEach(el => el.remove());
-    }
-  });
 }
 
 /* ============================================================
