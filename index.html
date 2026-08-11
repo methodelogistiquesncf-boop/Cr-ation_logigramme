@@ -1857,6 +1857,8 @@ function setupGlobalEvents() {
 
   canvasContainer.addEventListener('mousedown', (e) => {
     if (e.target === canvasContainer || e.target === canvasViewport || e.target === connectionsSvg) {
+      // ✅ FIX : Capturer le pointer pour garantir le pointerup
+      canvasContainer.setPointerCapture(e.pointerId);
       if (e.button === 1 || (e.button === 0 && spacePressed)) { e.preventDefault(); startPan(e); }
       else if (e.button === 0) {
         state.selectedNodes.clear();
@@ -1874,12 +1876,24 @@ function setupGlobalEvents() {
     else if (marquee) handleMarqueeMove(e);
   });
 
-  window.addEventListener('mouseup', () => {
+  // ✅ FIX PRINCIPAL : pointerup sur document (toujours capture, meme si souris sort)
+  document.addEventListener('pointerup', function(e) {
     if (dragState) handleNodeDragEnd();
     if (panState) handlePanEnd();
     if (connectionDrag) handleConnectionDragEnd();
     if (endpointDrag) handleEndpointDragEnd();
     if (marquee) handleMarqueeEnd();
+  });
+
+  // ✅ Sécurité : mouseleave annule tout
+  window.addEventListener('mouseleave', function() { cancelAllInteractions(); });
+  window.addEventListener('blur', function() { cancelAllInteractions(); });
+
+  // ✅ Sécurité : pointerup supplémentaire sur window
+  window.addEventListener('pointerup', function() {
+    if (!marquee && !dragState && !panState && !connectionDrag && !endpointDrag) {
+      canvasContainer.querySelectorAll('.selection-rectangle').forEach(function(el){el.remove();});
+    }
   });
 
   canvasContainer.addEventListener('wheel', (e) => {
