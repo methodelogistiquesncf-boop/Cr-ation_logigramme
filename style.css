@@ -482,3 +482,18 @@ svg.connections {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
 }
+/* Dans le CSS de index.html */
+.resize-handles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.resize-handle {
+  pointer-events: auto;
+}
+
+.node:hover .resize-handle,
+.node.selected .resize-handle {
+  opacity: 1 !important;
+}
