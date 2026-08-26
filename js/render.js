@@ -494,3 +494,104 @@ export function render() {
   }
   autosave();
 }
+
+// Dans createNodeElement(), après les anchor-points, ajouter les resize handles:
+
+function createResizeHandles(node, div) {
+  const handles = document.createElement('div');
+  handles.className = 'resize-handles';
+  
+  const positions = [
+    { name: 'n', style: 'top:0;left:50%;cursor:ns-resize' },
+    { name: 's', style: 'bottom:0;left:50%;cursor:ns-resize' },
+    { name: 'e', style: 'right:0;top:50%;cursor:ew-resize' },
+    { name: 'w', style: 'left:0;top:50%;cursor:ew-resize' },
+    { name: 'ne', style: 'top:0;right:0;cursornesw-resize' },
+    { name: 'se', style: 'bottom:0;right:0;cursornwse-resize' },
+    { name: 'sw', style: 'bottom:0;left:0;cursor:nesw-resize' },
+    { name: 'nw', style: 'top:0;left:0;cursornwse-resize' }
+  ];
+  
+  positions.forEach(pos => {
+    const handle = document.createElement('div');
+    handle.className = `resize-handle ${pos.name}`;
+    handle.style.cssText = `${pos.style};position:absolute;width:8px;height:8px;background:#0366d6;border:2px solid white;border-radius:50%;transform:translate(-50%,-50%);opacity:0;transition:opacity 0.2s;z-index:30;`;
+    
+    handle.addEventListener('mousedown', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      startResize(node, div, pos.name, e);
+    });
+    
+    handles.appendChild(handle);
+  });
+  
+  // Afficher les handles quand le noeud est sélectionné
+  if (state.selectedNode && state.selectedNode.id === node.id) {
+    handles.querySelectorAll('.resize-handle').forEach(h => h.style.opacity = '1');
+  }
+  
+  return handles;
+}
+
+let resizeState = null;
+
+function startResize(node, div, handle, e) {
+  resizeState = {
+    node,
+    div,
+    handle,
+    startX: e.clientX,
+    startY: e.clientY,
+    startWidth: node.width,
+    startHeight: node.height,
+    startXPos: node.x,
+    startYPos: node.y
+  };
+  
+  document.addEventListener('mousemove', handleResize);
+  document.addEventListener('mouseup', stopResize);
+}
+
+function handleResize(e) {
+  if (!resizeState) return;
+  
+  const dx = e.clientX - resizeState.startX;
+  const dy = e.clientY - resizeState.startY;
+  const handle = resizeState.handle;
+  
+  // Redimensionnement selon la poignée
+  if (handle.includes('e')) {
+    resizeState.node.width = Math.max(80, resizeState.startWidth + dx);
+  }
+  if (handle.includes('s')) {
+    resizeState.node.height = Math.max(40, resizeState.startHeight + dy);
+  }
+  if (handle.includes('w')) {
+    const newWidth = Math.max(80, resizeState.startWidth - dx);
+    resizeState.node.x = resizeState.startXPos + (resizeState.startWidth - newWidth);
+    resizeState.node.width = newWidth;
+  }
+  if (handle.includes('n')) {
+    const newHeight = Math.max(40, resizeState.startHeight - dy);
+    resizeState.node.y = resizeState.startYPos + (resizeState.startHeight - newHeight);
+    resizeState.node.height = newHeight;
+  }
+  
+  resizeState.div.style.width = resizeState.node.width + 'px';
+  resizeState.div.style.height = resizeState.node.height + 'px';
+  resizeState.div.style.left = resizeState.node.x + 'px';
+  resizeState.div.style.top = resizeState.node.y + 'px';
+  
+  renderConnections();
+}
+
+function stopResize() {
+  if (resizeState) {
+    autosave();
+    resizeState = null;
+    document.removeEventListener('mousemove', handleResize);
+    document.removeEventListener('mouseup', stopResize);
+  }
+}
+
