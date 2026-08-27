@@ -2,9 +2,9 @@
 // métier : il se contente de récupérer les éléments du DOM et de les
 // distribuer aux modules qui en ont besoin, puis de lancer le premier rendu.
 import { state } from './state.js';
-import { initRender, render } from './render.js';
+import { initRender, render, autoResizeAll } from './render.js';
 import {
-  initInteractions, startConnectionDrag, startNodeDrag, startElbowDrag, startEndpointDrag
+initInteractions, startConnectionDrag, startNodeDrag, startElbowDrag, startEndpointDrag
 } from './interactions.js';
 import { setSaveIndicator, restoreAutosave, undo, saveHistory } from './persistence.js';
 import { downloadSVG, downloadPNG, downloadProjectJSON, importProjectJSON } from './exporter.js';
@@ -21,53 +21,58 @@ const importBtn = document.getElementById('importBtn');
 const importInput = document.getElementById('importInput');
 const duplicateBtn = document.getElementById('duplicateBtn');
 const snapBtn = document.getElementById('snapBtn');
+const autoResizeBtn = document.getElementById('autoResizeBtn');
 const saveIndicator = document.getElementById('saveIndicator');
 const shapeItems = document.querySelectorAll('.shape-item');
 
 setSaveIndicator(saveIndicator);
 
 initRender({
-  canvas,
-  connectionsSvg,
-  properties,
-  onPortMouseDown: startConnectionDrag,
-  onNodeMouseDown: startNodeDrag,
-  onElbowHandleMouseDown: startElbowDrag,
-  onEndpointMouseDown: startEndpointDrag
+canvas,
+connectionsSvg,
+properties,
+onPortMouseDown: startConnectionDrag,
+onNodeMouseDown: startNodeDrag,
+onElbowHandleMouseDown: startElbowDrag,
+onEndpointMouseDown: startEndpointDrag
 });
 
 initInteractions({
-  canvas,
-  connectionsSvg,
-  shapeItems,
-  snapBtn,
-  duplicateBtn,
-  undoBtn
+canvas,
+connectionsSvg,
+shapeItems,
+snapBtn,
+duplicateBtn,
+undoBtn
 });
 
 undoBtn.addEventListener('click', () => undo(render));
 
 clearBtn.addEventListener('click', () => {
-  if (confirm('Voulez-vous vraiment vider le logigramme ?')) {
-    saveHistory();
-    state.nodes = [];
-    state.connections = [];
-    state.selectedNode = null;
-    state.selectedConnection = null;
-    render();
-  }
+if (confirm('Voulez-vous vraiment vider le logigramme ?')) {
+saveHistory();
+state.nodes = [];
+state.connections = [];
+state.selectedNode = null;
+state.selectedConnection = null;
+render();
+}
 });
 
 exportBtn.addEventListener('click', downloadSVG);
 exportPngBtn.addEventListener('click', downloadPNG);
 saveJsonBtn.addEventListener('click', downloadProjectJSON);
-
 importBtn.addEventListener('click', () => importInput.click());
 importInput.addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  importProjectJSON(file, render);
-  importInput.value = '';
+const file = e.target.files[0];
+if (!file) return;
+importProjectJSON(file, render);
+importInput.value = '';
+});
+
+// Bouton Auto-resize
+autoResizeBtn.addEventListener('click', () => {
+autoResizeAll();
 });
 
 // Initialisation
