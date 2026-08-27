@@ -76,6 +76,13 @@ autoResizeBtn.addEventListener('click', () => {
 autoResizeAll();
 });
 
+import { autoResizeAll } from './render.js';
+
+autoResizeBtn.addEventListener('click', () => {
+autoResizeAll();
+render();
+});
+
 // Initialisation
 restoreAutosave();
 render();
