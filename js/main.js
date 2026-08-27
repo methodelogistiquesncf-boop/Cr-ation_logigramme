@@ -8,6 +8,7 @@ initInteractions, startConnectionDrag, startNodeDrag, startElbowDrag, startEndpo
 } from './interactions.js';
 import { setSaveIndicator, restoreAutosave, undo, saveHistory } from './persistence.js';
 import { downloadSVG, downloadPNG, downloadProjectJSON, importProjectJSON } from './exporter.js';
+const autoResizeBtn = document.getElementById('autoResizeBtn');
 
 const canvas = document.getElementById('canvas');
 const connectionsSvg = document.getElementById('connectionsSvg');
